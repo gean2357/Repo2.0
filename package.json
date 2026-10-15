@@ -1,0 +1,24 @@
+{
+  "name": "discord-clone",
+  "version": "1.0.0",
+  "description": "Discord Web Clone com Go Live (Compartilhamento de Tela), Voice Chat, WebSockets e fallback sem backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "discord",
+    "clone",
+    "webrtc",
+    "go-live",
+    "screen-sharing",
+    "tailwind"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}

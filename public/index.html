@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discord Clone | Go Live & Voice</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            discord: {
+              blurple: '#5865F2',
+              green: '#23A55A',
+              yellow: '#F0B232',
+              red: '#F23F43',
+              dark: '#313338',
+              sidebar: '#2B2D31',
+              servers: '#1E1F22',
+              card: '#232428',
+              hover: '#35373C',
+              input: '#383A40',
+              muted: '#949BA4',
+              text: '#DBDEE1',
+              white: '#F2F3F5'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Custom Styles & Animations -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png">
+</head>
+<body class="bg-[#1e1f22] text-[#dbdee1] flex h-screen w-screen overflow-hidden select-none font-sans">
+
+  <!-- ========================================================= -->
+  <!-- 1. SERVERS SIDEBAR (LEFT-MOST BAR, 72px) -->
+  <!-- ========================================================= -->
+  <nav class="w-[72px] bg-[#1e1f22] flex flex-col items-center py-3 space-y-2 z-20 flex-shrink-0 overflow-y-auto no-scrollbar">
+    <div id="serverListContainer" class="w-full flex flex-col items-center">
+      <!-- Populated dynamically by store.js & app.js -->
+    </div>
+  </nav>
+
+  <!-- ========================================================= -->
+  <!-- 2. CHANNELS SIDEBAR (240px) -->
+  <!-- ========================================================= -->
+  <aside class="w-60 bg-[#2b2d31] flex flex-col flex-shrink-0 z-10 select-none border-r border-[#1f2023]/50">
+    <!-- Server Header Dropdown -->
+    <div id="serverHeaderDropdown" class="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between font-bold text-white shadow-sm hover:bg-[#35373c]/50 cursor-pointer transition relative">
+      <span id="currentServerName" class="truncate font-semibold text-base">Comunidade Dev & Tech</span>
+      <svg class="w-5 h-5 text-[#b5bac1]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </div>
+
+    <!-- Server Dropdown Menu (Hidden by default) -->
+    <div id="serverDropdownMenu" class="hidden absolute top-14 left-[76px] w-56 bg-[#111214] rounded-md shadow-2xl p-1.5 z-50 text-sm font-medium border border-[#232428] space-y-1">
+      <button onclick="window.discordApp.openCreateChannel()" class="w-full text-left px-2.5 py-2 rounded text-[#5865f2] hover:bg-[#5865f2] hover:text-white flex items-center justify-between transition">
+        <span>Criar Canal</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      </button>
+      <button onclick="window.discordStream.openGoLiveDialog()" class="w-full text-left px-2.5 py-2 rounded text-[#23a55a] hover:bg-[#23a55a] hover:text-white flex items-center justify-between transition">
+        <span>Iniciar Go Live 📺</span>
+        <span class="text-[10px] bg-red-600 px-1 py-0.5 rounded text-white font-bold uppercase">LIVE</span>
+      </button>
+      <div class="h-[1px] bg-[#2b2d31] my-1"></div>
+      <button onclick="window.discordApp.openUserSettings()" class="w-full text-left px-2.5 py-2 rounded text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition">Configurações do Servidor</button>
+      <button onclick="alert('Link de convite gerado: https://discord.gg/clone-preview')" class="w-full text-left px-2.5 py-2 rounded text-[#5865f2] hover:bg-[#5865f2] hover:text-white transition">Convidar Pessoas</button>
+    </div>
+
+    <!-- Channels List -->
+    <div id="channelListContainer" class="flex-1 overflow-y-auto px-1 py-2 space-y-4">
+      <!-- Populated dynamically -->
+    </div>
+
+    <!-- Voice Connected Status Panel (Shown when user joins voice) -->
+    <div id="voiceConnectionBar" class="hidden flex-col bg-[#232428] border-b border-[#1f2023] p-2 space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <svg class="w-5 h-5 text-[#23a55a] animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v2h-2v-2zm0-10h2v8h-2V6z"/>
+          </svg>
+          <div class="leading-tight">
+            <div class="text-[#23a55a] font-bold text-xs flex items-center space-x-1">
+              <span>Voz Conectada</span>
+              <span id="voiceLiveBadge" class="hidden px-1 text-[9px] bg-[#f23f43] text-white rounded font-bold uppercase">AO VIVO</span>
+            </div>
+            <div id="voiceConnectedChannelTitle" class="text-xs text-[#949ba4] truncate max-w-[130px]">Lounge Geral</div>
+          </div>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span id="voicePingIndicator" class="text-[11px] text-[#23a55a] font-mono">19 ms</span>
+          <button id="btnDisconnectVoice" class="p-1 hover:bg-[#35373c] text-[#949ba4] hover:text-red-500 rounded transition" title="Desconectar">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.3 14.3a.996.996 0 01-1.41 0L12 13.41 9.11 16.3a.996.996 0 11-1.41-1.41L10.59 12 7.7 9.11A.996.996 0 119.11 7.7L12 10.59l2.89-2.89a.996.996 0 111.41 1.41L13.41 12l2.89 2.89c.38.38.38 1.02 0 1.41z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Voice Action Buttons: Go Live & Video Camera -->
+      <div class="grid grid-cols-2 gap-2 pt-1 border-t border-[#35373c]/40">
+        <button id="btnToggleCamera" class="px-2 py-1.5 bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] rounded text-xs font-semibold flex items-center justify-center transition">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          <span>Vídeo</span>
+        </button>
+        <button id="btnGoLiveModal" class="btn-screen-share px-2 py-1.5 bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] rounded text-xs font-semibold flex items-center justify-center transition">
+          <svg class="w-4 h-4 mr-1.5 text-[#23a55a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+          </svg>
+          <span>Tela</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- User Profile Bar (Bottom Left) -->
+    <div class="h-[52px] bg-[#232428] px-2 flex items-center justify-between">
+      <div onclick="window.discordApp.openUserSettings()" class="flex items-center space-x-2 py-1 px-1.5 -ml-1 rounded-md hover:bg-[#35373c] cursor-pointer flex-1 min-w-0 mr-1 transition">
+        <div class="relative flex-shrink-0">
+          <img id="myAvatarImg" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" class="w-8 h-8 rounded-full my-avatar-img object-cover" alt="User Avatar" />
+          <div id="myStatusIndicator" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#23a55a] rounded-full border-2 border-[#232428]"></div>
+        </div>
+        <div class="min-w-0 leading-tight">
+          <div id="myUsername" class="text-white text-sm font-semibold truncate">DevMaster</div>
+          <div id="myDiscriminator" class="text-xs text-[#949ba4] truncate">#1337</div>
+        </div>
+      </div>
+
+      <!-- Controls: Mute, Deafen, Settings -->
+      <div class="flex items-center space-x-0.5 text-[#b5bac1]">
+        <button id="btnToggleMic" class="p-1.5 hover:bg-[#35373c] hover:text-white rounded transition" title="Desativar/Ativar Microfone">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        </button>
+        <button id="btnToggleDeafen" class="p-1.5 hover:bg-[#35373c] hover:text-white rounded transition" title="Ensurdecer">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3a9 9 0 00-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7a9 9 0 00-9-9z"/></svg>
+        </button>
+        <button id="btnOpenUserSettings" class="p-1.5 hover:bg-[#35373c] hover:text-white rounded transition" title="Configurações de Usuário">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.485.485 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========================================================= -->
+  <!-- 3. MAIN CHAT & GO LIVE STAGE AREA -->
+  <!-- ========================================================= -->
+  <main class="flex-1 bg-[#313338] flex flex-col min-w-0 relative">
+    
+    <!-- Top Header Bar -->
+    <header class="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between bg-[#313338] shadow-sm flex-shrink-0 z-10">
+      <div class="flex items-center space-x-2 min-w-0">
+        <svg class="w-6 h-6 text-[#80848e] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+        </svg>
+        <span id="currentChannelName" class="font-bold text-white text-base truncate">geral</span>
+        <div class="h-4 w-[1px] bg-[#3f4147] mx-2 hidden sm:block"></div>
+        <span id="currentChannelTopic" class="text-xs text-[#949ba4] truncate hidden sm:block">Conversas gerais sobre tecnologia, programação e novidades.</span>
+      </div>
+
+      <!-- Header Action Icons -->
+      <div class="flex items-center space-x-4 text-[#b5bac1]">
+        <!-- Go Live Fast Button -->
+        <button onclick="window.discordStream.openGoLiveDialog()" class="flex items-center space-x-1.5 bg-[#23a55a] hover:bg-[#1f9250] text-white px-2.5 py-1 rounded text-xs font-semibold shadow transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          <span>Go Live</span>
+        </button>
+
+        <button class="hover:text-white transition" title="Notificações">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+        </button>
+        <button class="hover:text-white transition" title="Mensagens Fixadas">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+        </button>
+        <button id="btnToggleMembers" class="hover:text-white transition" title="Lista de Membros">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        </button>
+        <!-- Search Input -->
+        <div class="relative hidden md:block">
+          <input type="text" placeholder="Buscar" class="w-36 focus:w-60 bg-[#1e1f22] text-xs text-[#dbdee1] rounded px-2 py-1 pr-6 focus:outline-none transition-all placeholder-[#949ba4]" />
+          <svg class="w-3.5 h-3.5 text-[#949ba4] absolute right-2 top-2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+      </div>
+    </header>
+
+    <!-- ========================================================= -->
+    <!-- GO LIVE SCREEN SHARE STAGE (THEATER MODE) -->
+    <!-- ========================================================= -->
+    <div id="goLiveStage" class="hidden flex-col bg-black relative border-b border-[#232428] w-full max-h-[60vh] flex-shrink-0 transition-all">
+      <!-- Live Video Canvas / Video Player -->
+      <div class="relative w-full h-[55vh] flex items-center justify-center bg-[#000] overflow-hidden group">
+        <video id="goLiveVideo" autoplay playsinline class="w-full h-full object-contain max-h-[55vh]"></video>
+
+        <!-- Top Stream Info Overlay -->
+        <div class="absolute top-3 left-4 flex items-center space-x-3 bg-black/60 backdrop-blur px-3 py-1.5 rounded-full z-10">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-[#f23f43] animate-ping"></span>
+            <span class="text-xs font-bold uppercase tracking-wider text-white">AO VIVO</span>
+          </div>
+          <div class="h-3 w-[1px] bg-white/30"></div>
+          <span id="streamQualityBadge" class="text-xs text-[#b5bac1] font-mono">1080p 60FPS</span>
+          <div class="h-3 w-[1px] bg-white/30"></div>
+          <span class="text-xs text-[#23a55a] font-medium flex items-center">
+            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            <span>Transmitindo</span>
+          </span>
+        </div>
+
+        <!-- Hover Controls Overlay -->
+        <div class="absolute bottom-3 right-4 flex items-center space-x-2 bg-black/75 backdrop-blur px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <button id="btnPip" class="p-2 hover:bg-white/10 rounded text-[#dbdee1] hover:text-white transition" title="Picture in Picture">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          </button>
+          <button id="btnFullscreen" class="p-2 hover:bg-white/10 rounded text-[#dbdee1] hover:text-white transition" title="Tela Cheia">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+          </button>
+          <button id="btnStopStream" class="px-3 py-1.5 bg-[#f23f43] hover:bg-[#da373c] text-white text-xs font-bold rounded flex items-center space-x-1.5 transition">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+            <span>Parar Transmissão</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Messages Scroll Container -->
+    <div id="chatMessagesContainer" class="flex-1 overflow-y-auto px-1 py-2 flex flex-col justify-start">
+      <!-- Populated dynamically by chat.js -->
+    </div>
+
+    <!-- Chat Typing Indicator -->
+    <div id="typingIndicator" class="hidden px-4 py-0.5 text-xs text-[#949ba4] font-medium flex items-center space-x-1.5">
+      <span class="inline-block w-1.5 h-1.5 bg-[#949ba4] rounded-full animate-bounce"></span>
+      <span class="inline-block w-1.5 h-1.5 bg-[#949ba4] rounded-full animate-bounce [animation-delay:0.2s]"></span>
+      <span class="inline-block w-1.5 h-1.5 bg-[#949ba4] rounded-full animate-bounce [animation-delay:0.4s]"></span>
+      <span class="pl-1">Clyde BOT está digitando...</span>
+    </div>
+
+    <!-- File Attachment Preview Bar (When user selects a file) -->
+    <div id="attachmentPreview" class="hidden px-4 py-2 bg-[#2b2d31] border-t border-[#232428] items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <img id="attachmentPreviewImg" src="" class="hidden w-12 h-12 object-cover rounded" alt="Preview" />
+        <span class="text-xs text-[#dbdee1] font-medium">Arquivo pronto para envio</span>
+      </div>
+      <button id="btnRemoveAttachment" class="text-xs text-red-400 hover:text-red-300 font-bold">Cancelar</button>
+    </div>
+
+    <!-- Chat Text Input Box -->
+    <div class="p-4 pt-1 flex-shrink-0 relative">
+      <div class="bg-[#383a40] rounded-lg px-4 py-2.5 flex items-center space-x-3 shadow-inner">
+        <!-- Attachment Button (+) -->
+        <input type="file" id="fileAttachmentInput" class="hidden" accept="image/*,.pdf,.zip,.txt" />
+        <button id="btnAttachFile" class="text-[#b5bac1] hover:text-white p-1 hover:bg-[#4e5058] rounded-full transition" title="Enviar um arquivo">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+        </button>
+
+        <!-- Main Text Input -->
+        <input id="chatInput" type="text" placeholder="Conversar em #geral" class="bg-transparent flex-1 text-sm text-[#dbdee1] focus:outline-none placeholder-[#949ba4]" autocomplete="off" />
+
+        <!-- Nitro Gift Icon -->
+        <button class="text-[#b5bac1] hover:text-[#f47fff] transition" title="Presentear Nitro">
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+        </button>
+
+        <!-- GIF Picker Toggle -->
+        <button id="btnGifPicker" class="text-xs font-bold bg-[#4e5058] hover:bg-[#6d6f78] text-white px-2 py-0.5 rounded transition" title="Abrir seletor de GIF">
+          GIF
+        </button>
+
+        <!-- Emoji Picker Toggle -->
+        <button id="btnEmojiPicker" class="text-[#b5bac1] hover:text-[#f0b232] transition" title="Selecionar Emoji">
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
+        </button>
+
+        <!-- Send Message Button -->
+        <button id="btnSendMessage" class="p-1 text-[#5865f2] hover:text-[#4752c4] transition" title="Enviar Mensagem">
+          <svg class="w-6 h-6 transform rotate-90" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+
+      <!-- Emoji Popover Drawer -->
+      <div id="emojiPopover" class="hidden absolute bottom-16 right-6 w-72 bg-[#2b2d31] border border-[#232428] rounded-lg shadow-2xl p-3 z-50">
+        <div class="text-xs font-bold uppercase text-[#949ba4] mb-2">Emojis Populares</div>
+        <div class="grid grid-cols-6 gap-2 text-xl cursor-pointer">
+          <button class="emoji-select-btn hover:scale-125 transition">😀</button>
+          <button class="emoji-select-btn hover:scale-125 transition">🚀</button>
+          <button class="emoji-select-btn hover:scale-125 transition">🔥</button>
+          <button class="emoji-select-btn hover:scale-125 transition">🎮</button>
+          <button class="emoji-select-btn hover:scale-125 transition">💻</button>
+          <button class="emoji-select-btn hover:scale-125 transition">🎧</button>
+          <button class="emoji-select-btn hover:scale-125 transition">🎉</button>
+          <button class="emoji-select-btn hover:scale-125 transition">❤️</button>
+          <button class="emoji-select-btn hover:scale-125 transition">👍</button>
+          <button class="emoji-select-btn hover:scale-125 transition">⚡</button>
+          <button class="emoji-select-btn hover:scale-125 transition">✨</button>
+          <button class="emoji-select-btn hover:scale-125 transition">💯</button>
+        </div>
+      </div>
+
+      <!-- GIF Popover Drawer -->
+      <div id="gifPopover" class="hidden absolute bottom-16 right-16 w-80 bg-[#2b2d31] border border-[#232428] rounded-lg shadow-2xl p-3 z-50">
+        <div class="text-xs font-bold uppercase text-[#949ba4] mb-2">GIFs em Alta</div>
+        <div class="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+          <img src="https://media.giphy.com/media/unQ3IJU2RG7DO/giphy.gif" class="gif-select-img w-full h-24 object-cover rounded cursor-pointer hover:opacity-80 transition" alt="GIF Cat" />
+          <img src="https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif" class="gif-select-img w-full h-24 object-cover rounded cursor-pointer hover:opacity-80 transition" alt="GIF Cat 2" />
+          <img src="https://media.giphy.com/media/ule4akeXnY9A50FYME/giphy.gif" class="gif-select-img w-full h-24 object-cover rounded cursor-pointer hover:opacity-80 transition" alt="GIF Hacker" />
+          <img src="https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif" class="gif-select-img w-full h-24 object-cover rounded cursor-pointer hover:opacity-80 transition" alt="GIF Matrix" />
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- 4. RIGHT MEMBERS SIDEBAR (240px) -->
+  <!-- ========================================================= -->
+  <aside id="membersSidebar" class="w-60 bg-[#2b2d31] flex flex-col flex-shrink-0 overflow-y-auto select-none border-l border-[#1f2023]/50">
+    <div id="membersListContainer" class="py-2">
+      <!-- Populated dynamically by app.js -->
+    </div>
+  </aside>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: GO LIVE (SCREEN SHARE SELECTION) -->
+  <!-- ========================================================= -->
+  <div id="goLiveModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-lg rounded-xl shadow-2xl overflow-hidden text-[#dbdee1]">
+      <!-- Header -->
+      <div class="px-6 pt-6 pb-4 border-b border-[#232428] flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+            <span>Transmitir Sua Tela</span>
+            <span class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-[#f23f43] text-white">Go Live</span>
+          </h2>
+          <p class="text-xs text-[#949ba4] mt-1">Transmita uma tela inteira, janela de aplicativo ou aba com áudio e vídeo de alta fidelidade.</p>
+        </div>
+        <button id="closeGoLiveModal" class="text-[#949ba4] hover:text-white p-1 rounded">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Settings Body -->
+      <div class="p-6 space-y-5">
+        <!-- Resolution Picker -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#949ba4] mb-2">QUALIDADE DA TRANSMISSÃO</label>
+          <div class="grid grid-cols-3 gap-3">
+            <label class="flex flex-col items-center justify-center p-3 rounded-lg border border-[#3f4147] hover:border-[#5865f2] cursor-pointer bg-[#2b2d31] transition">
+              <input type="radio" name="stream_quality" value="720p" class="hidden peer">
+              <span class="font-bold text-white peer-checked:text-[#5865f2]">720p</span>
+              <span class="text-[11px] text-[#949ba4]">HD Padrão</span>
+            </label>
+            <label class="flex flex-col items-center justify-center p-3 rounded-lg border-2 border-[#5865f2] cursor-pointer bg-[#2b2d31] transition">
+              <input type="radio" name="stream_quality" value="1080p" checked class="hidden peer">
+              <span class="font-bold text-[#5865f2]">1080p</span>
+              <span class="text-[11px] text-[#949ba4]">Full HD</span>
+            </label>
+            <label class="flex flex-col items-center justify-center p-3 rounded-lg border border-[#3f4147] hover:border-[#5865f2] cursor-pointer bg-[#2b2d31] transition">
+              <input type="radio" name="stream_quality" value="source" class="hidden peer">
+              <span class="font-bold text-white peer-checked:text-[#5865f2]">Fonte</span>
+              <span class="text-[11px] text-[#949ba4]">Original</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Frame Rate Picker -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#949ba4] mb-2">TAXA DE QUADROS (FPS)</label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="flex items-center justify-center space-x-2 p-3 rounded-lg border border-[#3f4147] hover:border-[#5865f2] cursor-pointer bg-[#2b2d31] transition">
+              <input type="radio" name="stream_fps" value="30" class="accent-[#5865f2]">
+              <span class="font-bold text-white">30 FPS</span>
+            </label>
+            <label class="flex items-center justify-center space-x-2 p-3 rounded-lg border border-[#5865f2] cursor-pointer bg-[#2b2d31] transition">
+              <input type="radio" name="stream_fps" value="60" checked class="accent-[#5865f2]">
+              <span class="font-bold text-[#5865f2]">60 FPS Fluido</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Audio Checkbox Note -->
+        <div class="bg-[#2b2d31] p-3 rounded-lg flex items-start space-x-3 text-xs text-[#dbdee1]">
+          <svg class="w-5 h-5 text-[#23a55a] flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          <div>
+            <span class="font-bold text-white">Áudio do Sistema incluído:</span>
+            Ao abrir o seletor do navegador, marque a opção "Compartilhar áudio do sistema" para transmitir som de jogos e vídeos.
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="px-6 py-4 bg-[#2b2d31] border-t border-[#232428] flex justify-end space-x-3">
+        <button onclick="window.discordStream.hideGoLiveDialog()" class="px-4 py-2 text-sm font-semibold text-white hover:underline">Cancelar</button>
+        <button id="btnStartLiveAction" class="px-6 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white text-sm font-bold rounded shadow transition flex items-center space-x-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          <span>Transmitir ao Vivo</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: USER SETTINGS -->
+  <!-- ========================================================= -->
+  <div id="userSettingsModal" class="hidden fixed inset-0 z-50 bg-[#313338] flex flex-col md:flex-row overflow-hidden">
+    <!-- Settings Sidebar -->
+    <div class="w-full md:w-60 bg-[#2b2d31] p-6 flex flex-col justify-between flex-shrink-0 border-r border-[#1f2023]">
+      <div class="space-y-4">
+        <div class="text-xs font-bold uppercase tracking-wider text-[#949ba4] px-2">CONFIGURAÇÕES DE USUÁRIO</div>
+        <div class="space-y-1">
+          <button data-tab="account" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold bg-[#35373c] text-white transition">Minha Conta</button>
+          <button data-tab="voice-video" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold text-[#b5bac1] hover:bg-[#35373c] hover:text-white transition">Voz e Vídeo</button>
+          <button data-tab="appearance" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold text-[#b5bac1] hover:bg-[#35373c] hover:text-white transition">Aparência</button>
+          <button data-tab="about" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold text-[#b5bac1] hover:bg-[#35373c] hover:text-white transition">Sobre o Projeto</button>
+        </div>
+      </div>
+      <div class="pt-4 border-t border-[#35373c]">
+        <button id="btnCloseUserSettings" class="flex items-center space-x-2 text-xs font-bold text-[#b5bac1] hover:text-white">
+          <span class="w-7 h-7 rounded-full border-2 border-[#b5bac1] flex items-center justify-center font-mono">ESC</span>
+          <span>SAIR DAS CONFIGURAÇÕES</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Settings Content Area -->
+    <div class="flex-1 p-8 overflow-y-auto max-w-2xl text-[#dbdee1]">
+      <!-- Tab: Minha Conta -->
+      <div id="tab-account" class="settings-tab-pane space-y-6">
+        <h2 class="text-2xl font-bold text-white">Minha Conta</h2>
+        
+        <div class="bg-[#1e1f22] p-5 rounded-xl space-y-4 border border-[#2b2d31]">
+          <div>
+            <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1">NOME DE EXIBIÇÃO</label>
+            <input id="inputSettingUsername" type="text" class="w-full bg-[#383a40] text-white px-3 py-2 rounded text-sm focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1">TAG DISCRIMINATOR (#)</label>
+            <input id="inputSettingDiscriminator" type="text" class="w-full bg-[#383a40] text-white px-3 py-2 rounded text-sm focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1">URL DO AVATAR</label>
+            <input id="inputSettingAvatar" type="text" class="w-full bg-[#383a40] text-white px-3 py-2 rounded text-sm focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1">STATUS PERSONALIZADO</label>
+            <input id="inputSettingCustomStatus" type="text" class="w-full bg-[#383a40] text-white px-3 py-2 rounded text-sm focus:outline-none" />
+          </div>
+          <button id="btnSaveProfile" class="px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-bold text-sm rounded shadow transition">Salvar Alterações</button>
+        </div>
+      </div>
+
+      <!-- Tab: Voz e Vídeo -->
+      <div id="tab-voice-video" class="settings-tab-pane hidden space-y-6">
+        <h2 class="text-2xl font-bold text-white">Voz e Vídeo</h2>
+        <div class="bg-[#1e1f22] p-5 rounded-xl space-y-4 border border-[#2b2d31]">
+          <h3 class="text-sm font-bold uppercase text-[#949ba4]">TESTE DE MICROFONE</h3>
+          <p class="text-xs text-[#dbdee1]">Fale no microfone para verificar a sensibilidade de voz e a detecção de fala.</p>
+          <div class="h-4 bg-[#2b2d31] rounded-full overflow-hidden p-0.5 border border-[#3f4147]">
+            <div id="micMeterBar" class="h-full bg-[#23a55a] rounded-full transition-all w-2/3 animate-pulse"></div>
+          </div>
+          <div class="pt-3 border-t border-[#2b2d31]">
+            <h3 class="text-sm font-bold uppercase text-[#949ba4] mb-2">RECURSO GO LIVE</h3>
+            <p class="text-xs text-[#dbdee1] leading-relaxed">
+              O Go Live permite compartilhar tela com áudio integrado, captura de janelas e resolução dinâmica até 1080p 60 FPS através da API de <code class="text-[#5865f2]">getDisplayMedia</code>.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Aparência -->
+      <div id="tab-appearance" class="settings-tab-pane hidden space-y-6">
+        <h2 class="text-2xl font-bold text-white">Aparência</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="p-4 rounded-xl border-2 border-[#5865f2] bg-[#1e1f22] cursor-pointer">
+            <div class="font-bold text-white">Tema Escuro Discord</div>
+            <div class="text-xs text-[#949ba4]">Paleta oficial do Discord (Ativo)</div>
+          </div>
+          <div class="p-4 rounded-xl border border-[#3f4147] bg-[#2b2d31] opacity-60 cursor-not-allowed">
+            <div class="font-bold text-white">Tema Claro</div>
+            <div class="text-xs text-[#949ba4]">Modo claro clássico</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Sobre -->
+      <div id="tab-about" class="settings-tab-pane hidden space-y-6">
+        <h2 class="text-2xl font-bold text-white">Sobre o Discord Clone</h2>
+        <div class="bg-[#1e1f22] p-5 rounded-xl space-y-3 text-sm text-[#dbdee1] leading-relaxed border border-[#2b2d31]">
+          <p>Clone completo do Discord com engenharia reversa de UI/UX, executando sem necessidade de banco de dados externo ou backend pesado.</p>
+          <ul class="list-disc pl-5 space-y-1 text-xs text-[#949ba4]">
+            <li>Frontend: HTML5, CSS3, Tailwind CSS</li>
+            <li>Sons e Áudio: Web Audio API (Chimes autênticos)</li>
+            <li>Go Live: WebRTC MediaStream + Screen Capture DisplayMedia API</li>
+            <li>Tempo Real: WebSockets e BroadcastChannel para múltiplos navegadores</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: CREATE SERVER -->
+  <!-- ========================================================= -->
+  <div id="createServerModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-md rounded-xl shadow-2xl p-6 text-[#dbdee1] space-y-4">
+      <h2 class="text-2xl font-bold text-white text-center">Crie seu servidor</h2>
+      <p class="text-xs text-[#949ba4] text-center">Seu servidor é onde você e seus amigos se reúnem para conversar e transmitir ao vivo.</p>
+      <div>
+        <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1">NOME DO SERVIDOR</label>
+        <input id="newServerName" type="text" placeholder="Servidor Legal" class="w-full bg-[#1e1f22] text-white px-3 py-2 rounded text-sm focus:outline-none" />
+      </div>
+      <div class="flex justify-end space-x-3 pt-2">
+        <button id="btnCloseCreateServer" class="px-4 py-2 text-sm text-white hover:underline">Voltar</button>
+        <button id="btnSubmitCreateServer" class="px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white text-sm font-bold rounded">Criar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: CREATE CHANNEL -->
+  <!-- ========================================================= -->
+  <div id="createChannelModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-md rounded-xl shadow-2xl p-6 text-[#dbdee1] space-y-4">
+      <h2 class="text-xl font-bold text-white">Criar Canal</h2>
+      <div class="space-y-2">
+        <label class="flex items-center space-x-3 p-3 bg-[#2b2d31] rounded-lg cursor-pointer">
+          <input type="radio" name="newChannelType" value="text" checked class="accent-[#5865f2]">
+          <div>
+            <div class="font-bold text-white text-sm"># Texto</div>
+            <div class="text-xs text-[#949ba4]">Poste mensagens, imagens, memes e opiniões</div>
+          </div>
+        </label>
+        <label class="flex items-center space-x-3 p-3 bg-[#2b2d31] rounded-lg cursor-pointer">
+          <input type="radio" name="newChannelType" value="voice" class="accent-[#5865f2]">
+          <div>
+            <div class="font-bold text-white text-sm">🔊 Voz & Go Live</div>
+            <div class="text-xs text-[#949ba4]">Converse por voz e transmita sua tela ao vivo</div>
+          </div>
+        </label>
+      </div>
+      <div>
+        <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1">NOME DO CANAL</label>
+        <input id="newChannelName" type="text" placeholder="novo-canal" class="w-full bg-[#1e1f22] text-white px-3 py-2 rounded text-sm focus:outline-none" />
+      </div>
+      <div class="flex justify-end space-x-3 pt-2">
+        <button id="btnCloseCreateChannel" class="px-4 py-2 text-sm text-white hover:underline">Cancelar</button>
+        <button id="btnSubmitCreateChannel" class="px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white text-sm font-bold rounded">Criar Canal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: MEMBER PROFILE CARD -->
+  <!-- ========================================================= -->
+  <div id="memberProfileModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4">
+    <div class="modal-content bg-[#232428] border border-[#1e1f22] w-80 rounded-2xl shadow-2xl overflow-hidden text-[#dbdee1]">
+      <div class="h-20 bg-[#5865f2] relative">
+        <button id="closeMemberProfileModal" class="absolute top-2 right-2 p-1 text-white/80 hover:text-white rounded-full bg-black/20">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="px-4 pb-4 relative">
+        <div class="relative -top-10 mb--10">
+          <img id="profileModalAvatar" src="" class="w-20 h-20 rounded-full border-4 border-[#232428] object-cover" alt="Profile" />
+        </div>
+        <div class="mt-[-28px]">
+          <h3 id="profileModalName" class="text-lg font-bold text-white">Username</h3>
+          <span id="profileModalTag" class="text-xs text-[#949ba4]">#0000</span>
+        </div>
+        <div class="mt-3 pt-3 border-t border-[#35373c] space-y-2">
+          <div class="text-[11px] font-bold uppercase text-[#949ba4]">SOBRE MIM</div>
+          <div id="profileModalAbout" class="text-xs text-[#dbdee1]">Status info</div>
+          <div class="text-[11px] font-bold uppercase text-[#949ba4] pt-2">DISTINTIVOS</div>
+          <div id="profileModalBadges" class="flex flex-wrap gap-1"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script src="js/audio.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/stream.js"></script>
+  <script src="js/voice.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
