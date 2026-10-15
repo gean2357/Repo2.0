@@ -42,12 +42,30 @@ wss.on('connection', (ws, req) => {
     isDeafened: false
   });
 
-  // Notify new connection and send active streams
+  // Notify new connection with active voice participants and streams
+  const voiceParticipantsList = [];
+  activeUsers.forEach((u, cId) => {
+    if (u.voiceChannel) {
+      voiceParticipantsList.push({
+        clientId: cId,
+        channelId: u.voiceChannel,
+        user: {
+          id: u.userId || cId,
+          username: u.username,
+          avatar: u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.username)}`,
+          isStreaming: u.isStreaming || false,
+          isMuted: u.isMuted || false
+        }
+      });
+    }
+  });
+
   ws.send(JSON.stringify({
     type: 'init',
     clientId: clientId,
     activeUsers: Array.from(activeUsers.values()),
-    activeStreams: Array.from(activeStreams.values())
+    activeStreams: Array.from(activeStreams.values()),
+    voiceParticipants: voiceParticipantsList
   }));
 
   // Broadcast user count update
@@ -76,13 +94,19 @@ wss.on('connection', (ws, req) => {
             type: 'reaction_add',
             messageId: data.messageId,
             emoji: data.emoji,
-            userId: clientId
-          });
+            userId: data.userId || clientId
+          }, ws);
           break;
 
         case 'voice_join':
           if (activeUsers.has(clientId)) {
-            activeUsers.get(clientId).voiceChannel = data.channelId;
+            const u = activeUsers.get(clientId);
+            u.voiceChannel = data.channelId;
+            if (data.user) {
+              u.username = data.user.username;
+              u.avatar = data.user.avatar;
+              u.userId = data.user.id;
+            }
           }
           broadcast({
             type: 'voice_update',
@@ -93,6 +117,7 @@ wss.on('connection', (ws, req) => {
           break;
 
         case 'voice_leave':
+          const oldChan = activeUsers.has(clientId) ? activeUsers.get(clientId).voiceChannel : data.channelId;
           if (activeUsers.has(clientId)) {
             activeUsers.get(clientId).voiceChannel = null;
             activeUsers.get(clientId).isStreaming = false;
@@ -100,7 +125,9 @@ wss.on('connection', (ws, req) => {
           activeStreams.delete(clientId);
           broadcast({
             type: 'voice_leave',
-            userId: clientId
+            userId: clientId,
+            channelId: oldChan,
+            user: data.user
           });
           broadcast({
             type: 'stream_stopped',
@@ -136,10 +163,14 @@ wss.on('connection', (ws, req) => {
           });
           break;
 
-        // WebRTC Signaling for remote screen view between peers
+        // WebRTC Signaling for remote screen view & voice P2P between peers
         case 'webrtc_offer':
         case 'webrtc_answer':
         case 'webrtc_ice_candidate':
+        case 'webrtc_request_watch':
+        case 'webrtc_voice_offer':
+        case 'webrtc_voice_answer':
+        case 'webrtc_voice_ice_candidate':
           wss.clients.forEach(client => {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
               if (!data.targetId || client.clientId === data.targetId) {
@@ -150,6 +181,12 @@ wss.on('connection', (ws, req) => {
               }
             }
           });
+          break;
+
+        case 'server_created':
+        case 'server_invite_sent':
+        case 'server_member_joined':
+          broadcast(data, ws);
           break;
 
         case 'speaking_state':
@@ -169,8 +206,18 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
+    const userObj = activeUsers.get(clientId);
+    const lastVoiceChannel = userObj ? userObj.voiceChannel : null;
     activeUsers.delete(clientId);
     activeStreams.delete(clientId);
+    if (lastVoiceChannel) {
+      broadcast({
+        type: 'voice_leave',
+        channelId: lastVoiceChannel,
+        userId: clientId,
+        user: userObj ? { id: userObj.userId || clientId, username: userObj.username } : null
+      });
+    }
     broadcast({
       type: 'user_disconnect',
       userId: clientId,

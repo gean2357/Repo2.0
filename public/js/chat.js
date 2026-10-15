@@ -4,6 +4,7 @@ class DiscordChatManager {
     this.initElements();
     this.setupListeners();
     this.curAttachment = null;
+    this.startTimeoutMonitor();
   }
 
   initElements() {
@@ -153,6 +154,37 @@ class DiscordChatManager {
     this.renderMessages();
   }
 
+  startTimeoutMonitor() {
+    const checkTimeout = () => {
+      if (!this.chatInput) return;
+      const server = window.discordStore.getCurrentServer();
+      const channel = window.discordStore.getCurrentChannel();
+      if (!server) return;
+
+      const myId = window.discordStore.user ? window.discordStore.user.id : 'me';
+      const isTimedOut = window.discordStore.isMemberTimedOut(server.id, myId);
+      if (isTimedOut) {
+        const remaining = window.discordStore.getMemberTimeoutRemaining(server.id, myId);
+        this.chatInput.disabled = true;
+        this.chatInput.placeholder = `⛔ Você está de castigo (${remaining}s). Envio de mensagens bloqueado.`;
+        this.chatInput.classList.add('opacity-50', 'cursor-not-allowed', 'bg-red-950/20');
+        const sendBtn = document.getElementById('btnSendMessage');
+        if (sendBtn) sendBtn.disabled = true;
+      } else {
+        if (this.chatInput.disabled) {
+          this.chatInput.disabled = false;
+          this.chatInput.placeholder = `Conversar em #${channel ? channel.name : 'geral'}`;
+          this.chatInput.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-red-950/20');
+          const sendBtn = document.getElementById('btnSendMessage');
+          if (sendBtn) sendBtn.disabled = false;
+        }
+      }
+    };
+
+    setInterval(checkTimeout, 1000);
+    window.addEventListener('discord_member_timeout', checkTimeout);
+  }
+
   handleSendMessage() {
     const text = this.chatInput ? this.chatInput.value.trim() : '';
     const attachment = this.curAttachment;
@@ -161,6 +193,26 @@ class DiscordChatManager {
 
     const channel = window.discordStore.getCurrentChannel();
     if (!channel || channel.type !== 'text') return;
+
+    const server = window.discordStore.getCurrentServer();
+    if (server) {
+      const myId = window.discordStore.user ? window.discordStore.user.id : 'me';
+      if (window.discordStore.isMemberTimedOut(server.id, myId)) {
+        const remaining = window.discordStore.getMemberTimeoutRemaining(server.id, myId);
+        alert(`⛔ Você está de castigo por mais ${remaining} segundos e não pode enviar mensagens.`);
+        return;
+      }
+
+      if (!window.discordStore.hasPermission(server.id, myId, 'SEND_MESSAGES')) {
+        alert('⛔ Você não tem permissão para enviar mensagens neste servidor.');
+        return;
+      }
+
+      if (attachment && !window.discordStore.hasPermission(server.id, myId, 'ATTACH_FILES')) {
+        alert('⛔ Você não tem permissão para enviar anexos neste servidor.');
+        return;
+      }
+    }
 
     // Check for slash commands
     if (text.startsWith('/')) {

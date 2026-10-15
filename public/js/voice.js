@@ -1,4 +1,13 @@
 // Discord Voice Connection & Audio Analyzer Module
+const VOICE_RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' }
+  ]
+};
+
 class DiscordVoiceManager {
   constructor() {
     this.currentChannelId = null;
@@ -11,8 +20,15 @@ class DiscordVoiceManager {
     this.isCameraActive = false;
     this.cameraStream = null;
 
+    // WebRTC Real-time P2P Audio Mesh
+    this.voicePeerConnections = new Map(); // remoteClientId -> RTCPeerConnection
+    this.remoteAudioElements = new Map();  // remoteClientId -> HTMLAudioElement
+    this.iceQueues = new Map();            // remoteClientId -> Array of candidates
+    this.userVolumes = new Map();          // peerId -> volume percent (0-100)
+
     this.initElements();
     this.setupListeners();
+    this.initVolumeMenu();
   }
 
   initElements() {
@@ -42,10 +58,68 @@ class DiscordVoiceManager {
     if (this.btnToggleCamera) {
       this.btnToggleCamera.addEventListener('click', () => this.toggleCamera());
     }
+
+    // WebRTC Voice Signaling Listeners
+    window.addEventListener('discord_webrtc_voice_offer', (e) => this.handleVoiceOffer(e.detail));
+    window.addEventListener('discord_webrtc_voice_answer', (e) => this.handleVoiceAnswer(e.detail));
+    window.addEventListener('discord_webrtc_voice_ice_candidate', (e) => this.handleVoiceIceCandidate(e.detail));
+
+    // Desconecta peers ao sair
+    window.addEventListener('discord_voice_leave', (e) => {
+      if (e && e.detail && e.detail.userId) {
+        this.closeVoicePeer(e.detail.userId);
+      }
+    });
+    window.addEventListener('discord_user_disconnect', (e) => {
+      if (e && e.detail && e.detail.userId) {
+        this.closeVoicePeer(e.detail.userId);
+      }
+    });
+
+    // Escuta sincronização em tempo real de voz entre usuários
+    window.addEventListener('discord_voice_updated', (e) => {
+      this.renderVoiceParticipants();
+      if (this.currentChannelId && e && e.detail) {
+        const detail = e.detail;
+        if (detail.channelId === this.currentChannelId) {
+          const peerId = detail.userId;
+          if (peerId && peerId !== window.discordStore.clientId && peerId !== window.discordStore.user.id) {
+            if (!this.voicePeerConnections.has(peerId)) {
+              this.createVoiceOfferToPeer(peerId);
+            }
+          }
+        }
+      }
+    });
+
+    window.addEventListener('discord_speaking_state', (e) => {
+      this.updateSpeakingIndicators(e.detail);
+    });
+
+    // Muta o microfone imediatamente se o usuário for colocado de castigo
+    window.addEventListener('discord_member_timeout', () => {
+      const server = window.discordStore.getCurrentServer();
+      const myId = window.discordStore.user ? window.discordStore.user.id : 'me';
+      if (server && window.discordStore.isMemberTimedOut(server.id, myId)) {
+        this.isMuted = true;
+        if (this.micStream) {
+          this.micStream.getAudioTracks().forEach(t => t.enabled = false);
+        }
+        this.setSpeaking(false);
+        this.updateAudioIcons();
+      }
+    });
   }
 
   async joinVoiceChannel(channelId) {
     if (this.currentChannelId === channelId) return;
+
+    const server = window.discordStore.getCurrentServer();
+    const myId = window.discordStore.user ? window.discordStore.user.id : 'me';
+    if (server && !window.discordStore.hasPermission(server.id, myId, 'CONNECT_VOICE')) {
+      alert('⛔ Você não tem permissão para conectar neste canal de voz.');
+      return;
+    }
 
     // If already in another voice channel, leave first
     if (this.currentChannelId) {
@@ -54,9 +128,6 @@ class DiscordVoiceManager {
 
     this.currentChannelId = channelId;
     window.discordStore.currentVoiceChannelId = channelId;
-
-    // Find channel info
-    const server = window.discordStore.getCurrentServer();
     let chanObj = null;
     for (const cat of server.categories) {
       const found = cat.channels.find(c => c.id === channelId);
@@ -99,6 +170,9 @@ class DiscordVoiceManager {
     // Start voice input capture & audio analysis
     await this.startMicrophone();
 
+    // Add local user to store voice participants
+    window.discordStore.setVoiceParticipant(channelId, window.discordStore.user, window.discordStore.clientId);
+
     // Render voice participants
     this.renderVoiceParticipants();
 
@@ -107,6 +181,15 @@ class DiscordVoiceManager {
       type: 'voice_join',
       channelId: channelId,
       user: window.discordStore.user
+    });
+
+    // Inicia conexões WebRTC de áudio P2P com todos os participantes já no canal de voz
+    const participants = window.discordStore.getVoiceParticipants(channelId);
+    participants.forEach(p => {
+      const peerId = p.clientId || p.id;
+      if (peerId && peerId !== window.discordStore.clientId && peerId !== window.discordStore.user.id) {
+        this.createVoiceOfferToPeer(peerId);
+      }
     });
 
     console.log(`Conectado ao canal de voz: ${chanName}`);
@@ -118,6 +201,21 @@ class DiscordVoiceManager {
     if (playSound && window.discordAudio) {
       window.discordAudio.playLeave();
     }
+
+    // Fecha todas as conexões WebRTC e remove os elementos de áudio dos amigos
+    this.voicePeerConnections.forEach(pc => {
+      try { pc.close(); } catch (e) {}
+    });
+    this.voicePeerConnections.clear();
+
+    this.remoteAudioElements.forEach(audio => {
+      try {
+        audio.srcObject = null;
+        audio.remove();
+      } catch (e) {}
+    });
+    this.remoteAudioElements.clear();
+    this.iceQueues.clear();
 
     // If streaming, stop stream
     if (window.discordStream && window.discordStream.isStreaming) {
@@ -137,6 +235,9 @@ class DiscordVoiceManager {
     const oldChannelId = this.currentChannelId;
     this.currentChannelId = null;
     window.discordStore.currentVoiceChannelId = null;
+
+    // Remove local user from store
+    window.discordStore.removeVoiceParticipant(oldChannelId, window.discordStore.user.id, window.discordStore.clientId);
 
     // Hide voice connection bar
     if (this.voiceBar) {
@@ -162,6 +263,10 @@ class DiscordVoiceManager {
   }
 
   async startMicrophone() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.warn('Microfone não acessível (necessário HTTPS ou liberação de Secure Context no navegador).');
+      return;
+    }
     try {
       this.micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -216,6 +321,19 @@ class DiscordVoiceManager {
         return;
       }
 
+      const server = window.discordStore.getCurrentServer();
+      const myId = window.discordStore.user ? window.discordStore.user.id : 'me';
+      if (server && window.discordStore.isMemberTimedOut(server.id, myId)) {
+        this.setSpeaking(false);
+        this.isMuted = true;
+        if (this.micStream) {
+          this.micStream.getAudioTracks().forEach(t => t.enabled = false);
+        }
+        this.updateAudioIcons();
+        requestAnimationFrame(checkAudio);
+        return;
+      }
+
       this.analyser.getByteFrequencyData(dataArray);
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) {
@@ -254,6 +372,21 @@ class DiscordVoiceManager {
   }
 
   toggleMute() {
+    const server = window.discordStore.getCurrentServer();
+    const myId = window.discordStore.user ? window.discordStore.user.id : 'me';
+
+    if (server && this.isMuted) {
+      if (window.discordStore.isMemberTimedOut(server.id, myId)) {
+        const remaining = window.discordStore.getMemberTimeoutRemaining(server.id, myId);
+        alert(`⛔ Você está de castigo por mais ${remaining} segundos e não pode falar nos canais de voz.`);
+        return;
+      }
+      if (!window.discordStore.hasPermission(server.id, myId, 'SPEAK_VOICE')) {
+        alert('⛔ Você não tem permissão para falar nos canais de voz deste servidor.');
+        return;
+      }
+    }
+
     this.isMuted = !this.isMuted;
     if (this.micStream) {
       this.micStream.getAudioTracks().forEach(t => {
@@ -282,7 +415,177 @@ class DiscordVoiceManager {
       window.discordAudio.playUnmute();
     }
 
+    // Silencia ou reativa os áudios remotos de todos os amigos na call
+    this.remoteAudioElements.forEach(audio => {
+      audio.muted = this.isDeafened;
+    });
+
     this.updateAudioIcons();
+  }
+
+  // =========================================================
+  // WebRTC Mesh P2P Real Audio Streaming
+  // =========================================================
+  createVoicePeerConnection(peerId) {
+    if (this.voicePeerConnections.has(peerId)) {
+      try { this.voicePeerConnections.get(peerId).close(); } catch (e) {}
+    }
+
+    const pc = new RTCPeerConnection(VOICE_RTC_CONFIG);
+    this.voicePeerConnections.set(peerId, pc);
+
+    // Adiciona faixa de áudio do microfone local à conexão P2P
+    if (this.micStream) {
+      this.micStream.getAudioTracks().forEach(track => {
+        pc.addTrack(track, this.micStream);
+      });
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        window.discordStore.sendWs({
+          type: 'webrtc_voice_ice_candidate',
+          targetId: peerId,
+          candidate: event.candidate
+        });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      console.log(`🔊 [WebRTC Voz] Áudio de voz recebido de ${peerId}!`);
+      const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+      this.playRemoteVoiceAudio(peerId, stream);
+    };
+
+    return pc;
+  }
+
+  async createVoiceOfferToPeer(peerId) {
+    try {
+      const pc = this.createVoicePeerConnection(peerId);
+      const offer = await pc.createOffer({ offerToReceiveAudio: true });
+      await pc.setLocalDescription(offer);
+
+      window.discordStore.sendWs({
+        type: 'webrtc_voice_offer',
+        targetId: peerId,
+        offer: offer
+      });
+      console.log(`🎙️ [WebRTC Voz] Oferta de áudio enviada para ${peerId}`);
+    } catch (err) {
+      console.error(`Erro ao criar oferta de voz para ${peerId}:`, err);
+    }
+  }
+
+  async handleVoiceOffer(detail) {
+    if (!this.currentChannelId) return;
+    const fromId = detail.fromId;
+    console.log(`🎙️ [WebRTC Voz] Oferta de áudio recebida de ${fromId}`);
+
+    try {
+      const pc = this.createVoicePeerConnection(fromId);
+      await pc.setRemoteDescription(new RTCSessionDescription(detail.offer));
+      this.drainIceQueue(fromId, pc);
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      window.discordStore.sendWs({
+        type: 'webrtc_voice_answer',
+        targetId: fromId,
+        answer: answer
+      });
+      console.log(`🎙️ [WebRTC Voz] Resposta de áudio enviada para ${fromId}`);
+    } catch (err) {
+      console.error(`Erro ao responder oferta de voz de ${fromId}:`, err);
+    }
+  }
+
+  async handleVoiceAnswer(detail) {
+    const fromId = detail.fromId;
+    const pc = this.voicePeerConnections.get(fromId);
+    if (pc && pc.signalingState !== 'closed') {
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(detail.answer));
+        this.drainIceQueue(fromId, pc);
+        console.log(`✅ [WebRTC Voz] Áudio P2P conectado com sucesso com ${fromId}!`);
+      } catch (err) {
+        console.error(`Erro ao processar resposta de áudio de ${fromId}:`, err);
+      }
+    }
+  }
+
+  async handleVoiceIceCandidate(detail) {
+    const fromId = detail.fromId;
+    const pc = this.voicePeerConnections.get(fromId);
+    if (pc && pc.remoteDescription && detail.candidate) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(detail.candidate));
+      } catch (err) {
+        console.warn('Erro ao adicionar ICE candidate de voz:', err);
+      }
+    } else if (detail.candidate) {
+      if (!this.iceQueues.has(fromId)) {
+        this.iceQueues.set(fromId, []);
+      }
+      this.iceQueues.get(fromId).push(detail.candidate);
+    }
+  }
+
+  drainIceQueue(peerId, pc) {
+    if (this.iceQueues.has(peerId)) {
+      const queue = this.iceQueues.get(peerId);
+      queue.forEach(candidate => {
+        try {
+          pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {}
+      });
+      this.iceQueues.delete(peerId);
+    }
+  }
+
+  playRemoteVoiceAudio(peerId, stream) {
+    let audio = this.remoteAudioElements.get(peerId);
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.id = `remote_voice_audio_${peerId}`;
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+      this.remoteAudioElements.set(peerId, audio);
+    }
+    audio.srcObject = stream;
+    audio.muted = this.isDeafened;
+
+    // Define volume padrão confortável (75%) para não começar estourado
+    const savedVol = this.userVolumes.has(peerId) ? this.userVolumes.get(peerId) : 75;
+    audio.volume = Math.min(1.0, Math.max(0.0, savedVol / 100));
+
+    audio.play().catch(e => {
+      console.log(`Áudio de voz aguardando interação do usuário para reproduzir:`, e);
+      const unlockAudio = () => {
+        audio.play().catch(() => {});
+        document.removeEventListener('click', unlockAudio);
+      };
+      document.addEventListener('click', unlockAudio, { once: true });
+    });
+  }
+
+  closeVoicePeer(peerId) {
+    if (this.voicePeerConnections.has(peerId)) {
+      try { this.voicePeerConnections.get(peerId).close(); } catch (e) {}
+      this.voicePeerConnections.delete(peerId);
+    }
+    if (this.remoteAudioElements.has(peerId)) {
+      try {
+        const audio = this.remoteAudioElements.get(peerId);
+        audio.srcObject = null;
+        audio.remove();
+      } catch (e) {}
+      this.remoteAudioElements.delete(peerId);
+    }
+    this.iceQueues.delete(peerId);
   }
 
   updateAudioIcons() {
@@ -349,27 +652,165 @@ class DiscordVoiceManager {
   }
 
   renderVoiceParticipants() {
-    // Show connected users under voice channel in sidebar
-    document.querySelectorAll('.voice-users-list').forEach(el => el.innerHTML = '');
+    // Show connected users under every voice channel in sidebar (exactly like Discord!)
+    document.querySelectorAll('[data-voice-list]').forEach(listEl => {
+      const chanId = listEl.getAttribute('data-voice-list');
+      const participants = window.discordStore.getVoiceParticipants(chanId);
+      const myUser = window.discordStore.user;
+      const isMeHere = this.currentChannelId === chanId;
 
-    if (!this.currentChannelId) return;
+      // Make sure local user is displayed in active channel
+      const allList = [...participants];
+      if (isMeHere && !allList.some(p => p.id === myUser.id)) {
+        allList.push({
+          ...myUser,
+          isSpeaking: this.isSpeaking,
+          isMuted: this.isMuted,
+          isStreaming: window.discordStream && window.discordStream.isStreaming
+        });
+      }
 
-    const listEl = document.querySelector(`[data-voice-list="${this.currentChannelId}"]`);
-    if (listEl) {
-      const user = window.discordStore.user;
-      const isStreaming = window.discordStream && window.discordStream.isStreaming;
+      if (allList.length === 0) {
+        listEl.innerHTML = '';
+        return;
+      }
 
-      listEl.innerHTML = `
-        <div class="flex items-center space-x-2 py-1 px-2 rounded hover:bg-[#35373c] cursor-pointer text-sm font-medium text-[#dbdee1]">
-          <div class="relative">
-            <img src="${user.avatar}" class="w-6 h-6 rounded-full voice-user-me ${this.isSpeaking ? 'speaking-active' : ''}" alt="${user.username}" />
+      listEl.innerHTML = allList.map(u => {
+        const isMe = u.id === myUser.id;
+        const isSpeaking = isMe ? this.isSpeaking : u.isSpeaking;
+        const isMuted = isMe ? this.isMuted : u.isMuted;
+        const isStreaming = isMe ? (window.discordStream && window.discordStream.isStreaming) : u.isStreaming;
+
+        return `
+          <div class="flex items-center space-x-2 py-1 px-2 mx-1 rounded hover:bg-[#35373c]/60 cursor-pointer text-xs font-medium text-[#dbdee1] transition group select-none"
+               oncontextmenu="window.discordVoice.openUserVolumeMenu(event, '${u.clientId || u.id}', '${u.username}', '${u.avatar}')"
+               onclick="if (event.detail === 2 || window.innerWidth < 768) window.discordVoice.openUserVolumeMenu(event, '${u.clientId || u.id}', '${u.username}', '${u.avatar}')">
+            <div class="relative flex-shrink-0" onclick="event.stopPropagation(); window.discordVoice.openUserVolumeMenu(event, '${u.clientId || u.id}', '${u.username}', '${u.avatar}')" title="Clique ou clique com botão direito para ajustar volume">
+              <img src="${u.avatar}" class="w-6 h-6 rounded-full object-cover transition-all ${isSpeaking ? 'ring-2 ring-[#23a55a]' : ''} ${isMe ? 'voice-user-me' : ''}" alt="${u.username}" />
+            </div>
+            <span class="truncate flex-1 ${isSpeaking ? 'text-[#23a55a] font-bold' : 'text-[#dbdee1]'}" title="${u.username}">${u.username}</span>
+            ${isStreaming ? `
+              <button onclick="event.stopPropagation(); window.discordStream.startWatchingRemote('${u.clientId || u.id}', '${u.username}')" class="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-[#f23f43] hover:bg-[#da373c] text-white flex items-center space-x-0.5 cursor-pointer shadow transition" title="Clique para assistir">
+                <span>AO VIVO</span>
+              </button>
+            ` : ''}
+            ${isMuted ? '<svg class="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>' : ''}
           </div>
-          <span class="truncate flex-1">${user.username}</span>
-          ${isStreaming ? '<span class="px-1 text-[9px] font-bold uppercase rounded bg-[#f23f43] text-white">AO VIVO</span>' : ''}
-          ${this.isMuted ? '<svg class="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>' : ''}
-        </div>
-      `;
+        `;
+      }).join('');
+    });
+  }
+
+  initVolumeMenu() {
+    this.userVolumes = new Map();
+    this.currentMenuPeerId = null;
+
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('userVoiceVolumeMenu');
+      if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    const slider = document.getElementById('userVolumeSlider');
+    const label = document.getElementById('userVolumePercentLabel');
+    if (slider) {
+      slider.addEventListener('input', () => {
+        if (!this.currentMenuPeerId) return;
+        const val = parseInt(slider.value, 10);
+        if (label) label.textContent = `${val}%`;
+        this.setUserVolume(this.currentMenuPeerId, val);
+      });
     }
+
+    const btnMute = document.getElementById('btnMuteTargetUser');
+    if (btnMute) {
+      btnMute.addEventListener('click', () => {
+        if (!this.currentMenuPeerId) return;
+        const currentVal = this.userVolumes.get(this.currentMenuPeerId) || 0;
+        if (currentVal > 0) {
+          this.userVolumes.set(this.currentMenuPeerId + '_prev', currentVal);
+          this.setUserVolume(this.currentMenuPeerId, 0);
+          if (slider) slider.value = 0;
+          if (label) label.textContent = '0%';
+          btnMute.textContent = 'Reativar Áudio';
+          btnMute.className = 'px-2.5 py-1 text-xs rounded bg-red-600/30 text-red-400 font-bold hover:bg-red-600/50 transition';
+        } else {
+          const prev = this.userVolumes.get(this.currentMenuPeerId + '_prev') || 75;
+          this.setUserVolume(this.currentMenuPeerId, prev);
+          if (slider) slider.value = prev;
+          if (label) label.textContent = `${prev}%`;
+          btnMute.textContent = 'Silenciar';
+          btnMute.className = 'px-2.5 py-1 text-xs rounded bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] transition';
+        }
+      });
+    }
+  }
+
+  setUserVolume(peerId, val) {
+    this.userVolumes.set(peerId, val);
+    const audio = this.remoteAudioElements.get(peerId);
+    if (audio) {
+      audio.volume = Math.min(1.0, Math.max(0.0, val / 100));
+    }
+  }
+
+  openUserVolumeMenu(e, peerId, username, avatar) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    const menu = document.getElementById('userVoiceVolumeMenu');
+    if (!menu) return;
+
+    // Se for o próprio usuário, não abre o menu de volume
+    if (peerId === window.discordStore.user.id || peerId === window.discordStore.clientId || peerId === 'me') {
+      return;
+    }
+
+    this.currentMenuPeerId = peerId;
+
+    const nameEl = document.getElementById('userVolumeName');
+    const avatarEl = document.getElementById('userVolumeAvatar');
+    const slider = document.getElementById('userVolumeSlider');
+    const label = document.getElementById('userVolumePercentLabel');
+    const btnMute = document.getElementById('btnMuteTargetUser');
+
+    if (nameEl) nameEl.textContent = username || 'Usuário';
+    if (avatarEl) avatarEl.src = avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username || 'user')}`;
+
+    const currentVol = this.userVolumes.has(peerId) ? this.userVolumes.get(peerId) : 75;
+    if (slider) slider.value = currentVol;
+    if (label) label.textContent = `${currentVol}%`;
+
+    if (btnMute) {
+      if (currentVol === 0) {
+        btnMute.textContent = 'Reativar Áudio';
+        btnMute.className = 'px-2.5 py-1 text-xs rounded bg-red-600/30 text-red-400 font-bold hover:bg-red-600/50 transition';
+      } else {
+        btnMute.textContent = 'Silenciar';
+        btnMute.className = 'px-2.5 py-1 text-xs rounded bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] transition';
+      }
+    }
+
+    menu.classList.remove('hidden');
+    const menuWidth = 260;
+    const menuHeight = 180;
+    let x = (e && e.clientX) ? e.clientX : window.innerWidth / 2 - 130;
+    let y = (e && e.clientY) ? e.clientY : window.innerHeight / 2 - 90;
+
+    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
+    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
+    if (x < 10) x = 10;
+    if (y < 10) y = 10;
+
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+  }
+
+  updateSpeakingIndicators(data) {
+    this.renderVoiceParticipants();
   }
 }
 

@@ -2,7 +2,7 @@
 <html lang="pt-BR" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Discord Clone | Go Live & Voice</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -39,18 +39,153 @@
 <body class="bg-[#1e1f22] text-[#dbdee1] flex h-screen w-screen overflow-hidden select-none font-sans">
 
   <!-- ========================================================= -->
-  <!-- 1. SERVERS SIDEBAR (LEFT-MOST BAR, 72px) -->
+  <!-- REALTIME SERVER INVITE TOAST NOTIFICATION -->
   <!-- ========================================================= -->
-  <nav class="w-[72px] bg-[#1e1f22] flex flex-col items-center py-3 space-y-2 z-20 flex-shrink-0 overflow-y-auto no-scrollbar">
-    <div id="serverListContainer" class="w-full flex flex-col items-center">
-      <!-- Populated dynamically by store.js & app.js -->
+  <div id="serverInviteToast" class="hidden fixed top-5 right-5 z-[999] max-w-sm bg-[#111214] border-2 border-[#5865f2] rounded-xl shadow-2xl p-4 text-[#dbdee1] transition-all transform duration-300">
+    <div class="flex items-start space-x-3">
+      <div id="toastServerIcon" class="w-10 h-10 rounded-xl bg-[#5865f2] text-white font-bold flex items-center justify-center flex-shrink-0 text-sm overflow-hidden shadow">
+        CD
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="text-[11px] font-bold uppercase tracking-wider text-[#5865f2] flex items-center space-x-1">
+          <span>🔔</span>
+          <span>CONVITE PARA SERVIDOR</span>
+        </div>
+        <div id="toastInviteText" class="text-xs text-white font-medium mt-1 leading-snug">
+          DevMaster convidou você para o servidor.
+        </div>
+        <div class="flex items-center space-x-2 mt-3">
+          <button id="btnAcceptServerInvite" class="px-3 py-1.5 bg-[#23a55a] hover:bg-[#1f9250] text-white font-bold text-xs rounded-lg transition shadow">
+            Entrar no Servidor
+          </button>
+          <button id="btnDeclineServerInvite" class="px-3 py-1.5 bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] text-xs font-semibold rounded-lg transition">
+            Recusar
+          </button>
+        </div>
+      </div>
+      <button onclick="document.getElementById('serverInviteToast').classList.add('hidden')" class="text-[#949ba4] hover:text-white p-1">
+        ✕
+      </button>
     </div>
-  </nav>
+  </div>
 
   <!-- ========================================================= -->
-  <!-- 2. CHANNELS SIDEBAR (240px) -->
+  <!-- DISCORD LOGIN / REGISTER SCREEN OVERLAY -->
   <!-- ========================================================= -->
-  <aside class="w-60 bg-[#2b2d31] flex flex-col flex-shrink-0 z-10 select-none border-r border-[#1f2023]/50">
+  <div id="authScreen" class="hidden fixed inset-0 z-[100] items-center justify-center p-4 bg-[#1e1f22] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#2b2d31] via-[#1e1f22] to-[#111214] overflow-y-auto">
+    <div class="w-full max-w-3xl bg-[#313338] border border-[#232428] rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row text-[#dbdee1]">
+      
+      <!-- Left side: Login / Register Form -->
+      <div class="flex-1 p-8 flex flex-col justify-between">
+        <div>
+          <!-- Clyde Discord Logo -->
+          <div class="flex items-center space-x-2.5 mb-6">
+            <svg class="w-9 h-9 text-[#5865f2]" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M19.54 0c1.356 0 2.46 1.104 2.46 2.472v21.528l-2.58-2.28-1.452-1.344-1.536-1.428.636 2.22h-13.6c-1.356 0-2.46-1.104-2.46-2.472v-16.224c0-1.368 1.104-2.472 2.46-2.472h18.532zm-4.704 13.992c1.788 0 3.24-1.44 3.24-3.216 0-1.788-1.452-3.228-3.24-3.228s-3.24 1.44-3.24 3.228c0 1.776 1.452 3.216 3.24 3.216zm-5.676 0c1.788 0 3.24-1.44 3.24-3.216 0-1.788-1.452-3.228-3.24-3.228s-3.24 1.44-3.24 3.228c0 1.776 1.452 3.216 3.24 3.216z"/>
+            </svg>
+            <span class="font-extrabold text-white text-xl tracking-wide">Discord Clone</span>
+          </div>
+
+          <h2 id="authTitle" class="text-2xl font-bold text-white">Boas-vindas de volta!</h2>
+          <p id="authSubtitle" class="text-xs text-[#949ba4] mt-1 mb-5">Estamos muito animados em ver você novamente!</p>
+
+          <div id="authErrorMessage" class="hidden mb-4 p-2.5 rounded bg-[#f23f43]/15 border border-[#f23f43]/30 text-xs text-[#f23f43] font-medium"></div>
+
+          <!-- Form Fields -->
+          <form id="authForm" onsubmit="event.preventDefault(); window.discordApp.handleAuthSubmit();" class="space-y-4">
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-[#b5bac1] mb-1.5">
+                NOME DE USUÁRIO OU E-MAIL <span class="text-red-500">*</span>
+              </label>
+              <input id="authUsernameInput" type="text" required placeholder="Ex: DevMaster ou seu e-mail" class="w-full bg-[#1e1f22] text-white text-sm px-3.5 py-2.5 rounded-md border border-[#232428] focus:outline-none focus:border-[#5865f2] transition" />
+            </div>
+
+            <div id="authEmailGroup" class="hidden">
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-[#b5bac1] mb-1.5">
+                E-MAIL (OPCIONAL)
+              </label>
+              <input id="authEmailInput" type="email" placeholder="seuemail@exemplo.com" class="w-full bg-[#1e1f22] text-white text-sm px-3.5 py-2.5 rounded-md border border-[#232428] focus:outline-none focus:border-[#5865f2] transition" />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-[#b5bac1] mb-1.5">
+                SENHA <span class="text-red-500">*</span>
+              </label>
+              <input id="authPasswordInput" type="password" required placeholder="••••••••" class="w-full bg-[#1e1f22] text-white text-sm px-3.5 py-2.5 rounded-md border border-[#232428] focus:outline-none focus:border-[#5865f2] transition" />
+            </div>
+
+            <button type="submit" id="authSubmitBtn" class="w-full py-3 bg-[#5865f2] hover:bg-[#4752c4] text-white font-bold text-sm rounded-md transition shadow-md">
+              Entrar
+            </button>
+          </form>
+
+          <!-- Toggle Register / Login -->
+          <div class="mt-3 text-xs text-[#949ba4]">
+            <span id="authTogglePrompt">Precisa de uma conta?</span>
+            <button type="button" onclick="window.discordApp.toggleAuthMode()" id="authToggleBtn" class="text-[#00a8fc] hover:underline ml-1 font-semibold">
+              Registre-se
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right side: QR Code Box (Discord style) -->
+      <div class="w-full md:w-72 bg-[#2b2d31] p-8 flex flex-col items-center justify-center text-center border-t md:border-t-0 md:border-l border-[#232428]">
+        <div class="w-44 h-44 bg-white p-2.5 rounded-xl shadow-lg flex items-center justify-center relative mb-4">
+          <!-- Stylized QR Code with SVG -->
+          <svg class="w-full h-full text-black" viewBox="0 0 100 100" fill="currentColor">
+            <rect x="0" y="0" width="30" height="30" rx="4" />
+            <rect x="5" y="5" width="20" height="20" fill="white" />
+            <rect x="10" y="10" width="10" height="10" />
+            <rect x="70" y="0" width="30" height="30" rx="4" />
+            <rect x="75" y="5" width="20" height="20" fill="white" />
+            <rect x="80" y="10" width="10" height="10" />
+            <rect x="0" y="70" width="30" height="30" rx="4" />
+            <rect x="5" y="75" width="20" height="20" fill="white" />
+            <rect x="10" y="80" width="10" height="10" />
+            <!-- Dots pattern -->
+            <rect x="40" y="10" width="8" height="8" />
+            <rect x="52" y="10" width="8" height="8" />
+            <rect x="40" y="24" width="8" height="8" />
+            <rect x="52" y="36" width="8" height="8" />
+            <rect x="15" y="45" width="8" height="8" />
+            <rect x="30" y="45" width="8" height="8" />
+            <rect x="45" y="45" width="10" height="10" fill="#5865f2" />
+            <rect x="65" y="45" width="8" height="8" />
+            <rect x="80" y="45" width="8" height="8" />
+            <rect x="40" y="60" width="8" height="8" />
+            <rect x="55" y="60" width="8" height="8" />
+            <rect x="40" y="75" width="8" height="8" />
+            <rect x="55" y="75" width="8" height="8" />
+            <rect x="70" y="75" width="8" height="8" />
+            <rect x="85" y="75" width="8" height="8" />
+            <rect x="70" y="88" width="8" height="8" />
+            <rect x="85" y="88" width="8" height="8" />
+          </svg>
+        </div>
+        <h3 class="font-bold text-white text-base">Entrar com Código QR</h3>
+        <p class="text-xs text-[#949ba4] mt-1.5 leading-relaxed">
+          Escaneie isto com o aplicativo móvel do Discord para fazer login instantaneamente.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MOBILE DRAWER BACKDROP & SIDEBARS WRAPPER -->
+  <!-- ========================================================= -->
+  <div id="mobileDrawerBackdrop" onclick="window.discordApp.closeMobileDrawer()" class="fixed inset-0 bg-black/60 z-40 hidden md:hidden transition-opacity"></div>
+
+  <div id="mobileSidebarDrawer" class="fixed inset-y-0 left-0 z-50 flex transform transition-transform duration-300 ease-out -translate-x-full md:translate-x-0 md:static md:z-20 flex-shrink-0 h-full">
+    <!-- 1. SERVERS SIDEBAR (LEFT-MOST BAR, 72px) -->
+    <nav class="w-[72px] bg-[#1e1f22] flex flex-col items-center py-3 space-y-2 z-20 flex-shrink-0 overflow-y-auto no-scrollbar h-full">
+      <div id="serverListContainer" class="w-full flex flex-col items-center">
+        <!-- Populated dynamically by store.js & app.js -->
+      </div>
+    </nav>
+
+    <!-- 2. CHANNELS SIDEBAR (240px) -->
+    <aside class="w-60 bg-[#2b2d31] flex flex-col flex-shrink-0 z-10 select-none border-r border-[#1f2023]/50 h-full">
     <!-- Server Header Dropdown -->
     <div id="serverHeaderDropdown" class="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between font-bold text-white shadow-sm hover:bg-[#35373c]/50 cursor-pointer transition relative">
       <span id="currentServerName" class="truncate font-semibold text-base">Comunidade Dev & Tech</span>
@@ -70,8 +205,8 @@
         <span class="text-[10px] bg-red-600 px-1 py-0.5 rounded text-white font-bold uppercase">LIVE</span>
       </button>
       <div class="h-[1px] bg-[#2b2d31] my-1"></div>
-      <button onclick="window.discordApp.openUserSettings()" class="w-full text-left px-2.5 py-2 rounded text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition">Configurações do Servidor</button>
-      <button onclick="alert('Link de convite gerado: https://discord.gg/clone-preview')" class="w-full text-left px-2.5 py-2 rounded text-[#5865f2] hover:bg-[#5865f2] hover:text-white transition">Convidar Pessoas</button>
+      <button onclick="window.discordApp.openServerSettings()" class="w-full text-left px-2.5 py-2 rounded text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition">Configurações do Servidor</button>
+      <button onclick="window.discordApp.openInviteFriendsModal()" class="w-full text-left px-2.5 py-2 rounded text-[#5865f2] hover:bg-[#5865f2] hover:text-white transition">Convidar Pessoas</button>
     </div>
 
     <!-- Channels List -->
@@ -119,16 +254,87 @@
       </div>
     </div>
 
+    <!-- Quick Status & Profile Menu Popover (Hidden by default) -->
+    <div id="userQuickStatusMenu" class="hidden absolute bottom-14 left-16 w-72 bg-[#111214] border border-[#232428] rounded-xl shadow-2xl p-2 z-50 text-[#dbdee1] space-y-1">
+      <!-- User info header -->
+      <div class="p-2.5 bg-[#1e1f22] rounded-lg mb-2 flex items-center space-x-3">
+        <div class="avatar-wrap relative flex-shrink-0">
+          <div id="popoverAvatarDecoration" class="avatar-decoration-overlay decoration-cyberpunk"></div>
+          <img id="popoverAvatarImg" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" class="w-10 h-10 rounded-full object-cover" alt="Avatar" />
+          <div id="popoverStatusIndicator" class="status-indicator online w-3.5 h-3.5"></div>
+        </div>
+        <div class="min-w-0 flex-1 leading-tight">
+          <div id="popoverUsername" class="font-bold text-white text-sm truncate">DevMaster</div>
+          <div id="popoverCustomStatus" class="text-xs text-[#949ba4] truncate mt-0.5">Construindo o Discord Clone 🚀</div>
+        </div>
+      </div>
+
+      <div class="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] px-2 py-1">ALTERAR STATUS</div>
+
+      <!-- Online -->
+      <button onclick="window.discordApp.changeUserStatus('online')" class="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[#35373c] text-sm text-[#dbdee1] hover:text-white transition group">
+        <div class="flex items-center space-x-2.5">
+          <span class="w-3 h-3 rounded-full bg-[#23a55a]"></span>
+          <span class="font-medium">Online</span>
+        </div>
+        <span class="text-xs text-[#949ba4] group-hover:text-white">Disponível</span>
+      </button>
+
+      <!-- Ausente (Idle) -->
+      <button onclick="window.discordApp.changeUserStatus('idle')" class="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[#35373c] text-sm text-[#dbdee1] hover:text-white transition group">
+        <div class="flex items-center space-x-2.5">
+          <span class="w-3 h-3 rounded-full bg-[#f0b232]"></span>
+          <span class="font-medium">Ausente</span>
+        </div>
+        <span class="text-xs text-[#949ba4] group-hover:text-white">Ausente</span>
+      </button>
+
+      <!-- Não Perturbe / Ocupado (DND) -->
+      <button onclick="window.discordApp.changeUserStatus('dnd')" class="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[#35373c] text-sm text-[#dbdee1] hover:text-white transition group">
+        <div class="flex items-center space-x-2.5">
+          <span class="w-3 h-3 rounded-full bg-[#f23f43] flex items-center justify-center">
+            <span class="w-1.5 h-0.5 bg-white rounded"></span>
+          </span>
+          <span class="font-medium">Não perturbe (Ocupado)</span>
+        </div>
+        <span class="text-xs text-[#949ba4] group-hover:text-white">Silencioso</span>
+      </button>
+
+      <!-- Invisível / Offline -->
+      <button onclick="window.discordApp.changeUserStatus('offline')" class="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[#35373c] text-sm text-[#dbdee1] hover:text-white transition group">
+        <div class="flex items-center space-x-2.5">
+          <span class="w-3 h-3 rounded-full border-2 border-[#80848e]"></span>
+          <span class="font-medium">Invisível (Offline)</span>
+        </div>
+        <span class="text-xs text-[#949ba4] group-hover:text-white">Offline</span>
+      </button>
+
+      <div class="h-[1px] bg-[#232428] my-1"></div>
+
+      <!-- Change Profile Decoration Button -->
+      <button onclick="window.discordApp.openProfileCustomizer()" class="w-full flex items-center space-x-2 px-2.5 py-2 rounded text-[#f47fff] hover:bg-[#35373c] text-sm font-semibold transition">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <span>Mudar Moldura de Perfil</span>
+      </button>
+
+      <!-- Open Settings -->
+      <button onclick="window.discordApp.openUserSettings()" class="w-full flex items-center space-x-2 px-2.5 py-2 rounded text-[#dbdee1] hover:bg-[#35373c] hover:text-white text-sm transition">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.485.485 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        <span>Configurações de Usuário</span>
+      </button>
+    </div>
+
     <!-- User Profile Bar (Bottom Left) -->
-    <div class="h-[52px] bg-[#232428] px-2 flex items-center justify-between">
-      <div onclick="window.discordApp.openUserSettings()" class="flex items-center space-x-2 py-1 px-1.5 -ml-1 rounded-md hover:bg-[#35373c] cursor-pointer flex-1 min-w-0 mr-1 transition">
-        <div class="relative flex-shrink-0">
-          <img id="myAvatarImg" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" class="w-8 h-8 rounded-full my-avatar-img object-cover" alt="User Avatar" />
-          <div id="myStatusIndicator" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#23a55a] rounded-full border-2 border-[#232428]"></div>
+    <div class="h-[52px] bg-[#232428] px-2 flex items-center justify-between relative">
+      <div id="btnUserQuickProfile" onclick="window.discordApp.toggleQuickStatusMenu(event)" class="flex items-center space-x-2 py-1 px-1.5 -ml-1 rounded-md hover:bg-[#35373c] cursor-pointer flex-1 min-w-0 mr-1 transition">
+        <div class="avatar-wrap relative flex-shrink-0">
+          <div id="myAvatarDecoration" class="avatar-decoration-overlay decoration-cyberpunk"></div>
+          <img id="myAvatarImg" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" class="w-8 h-8 rounded-full my-avatar-img object-cover relative z-0" alt="User Avatar" />
+          <div id="myStatusIndicator" class="status-indicator online w-3.5 h-3.5"></div>
         </div>
         <div class="min-w-0 leading-tight">
           <div id="myUsername" class="text-white text-sm font-semibold truncate">DevMaster</div>
-          <div id="myDiscriminator" class="text-xs text-[#949ba4] truncate">#1337</div>
+          <div id="myCustomStatusShort" class="text-xs text-[#949ba4] truncate">Construindo o Discord Clone 🚀</div>
         </div>
       </div>
 
@@ -146,14 +352,156 @@
       </div>
     </div>
   </aside>
+  </div>
 
   <!-- ========================================================= -->
   <!-- 3. MAIN CHAT & GO LIVE STAGE AREA -->
   <!-- ========================================================= -->
-  <main class="flex-1 bg-[#313338] flex flex-col min-w-0 relative">
+  <main class="flex-1 bg-[#313338] flex flex-col min-w-0 relative w-full h-full">
     
-    <!-- Top Header Bar -->
-    <header class="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between bg-[#313338] shadow-sm flex-shrink-0 z-10">
+    <!-- Mobile Top Header Bar (Hamburger, Channel Title, and Members Button) -->
+    <div id="mobileTopBar" class="flex md:hidden h-12 bg-[#2b2d31] border-b border-[#1f2023] px-3 items-center justify-between flex-shrink-0 z-30">
+      <button onclick="window.discordApp.toggleMobileDrawer()" class="p-2 text-[#b5bac1] hover:text-white rounded-md hover:bg-[#35373c] focus:outline-none" aria-label="Abrir canais">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div id="mobileHeaderTitle" class="flex items-center space-x-1.5 font-bold text-white text-sm truncate max-w-[190px]">
+        <span class="text-[#80848e]">#</span>
+        <span id="mobileChannelNameText">geral</span>
+      </div>
+      <div class="flex items-center space-x-1">
+        <button onclick="window.discordApp.toggleMobileMembers()" class="p-2 text-[#b5bac1] hover:text-white rounded-md hover:bg-[#35373c]" aria-label="Membros">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- FRIENDS MAIN VIEW (HOME / AMIGOS HUB) -->
+    <!-- ========================================================= -->
+    <div id="friendsMainView" class="hidden flex-1 flex flex-col min-w-0 bg-[#313338] relative overflow-hidden">
+      <!-- Friends Top Sub-Header -->
+      <div class="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between bg-[#313338] flex-shrink-0 z-10">
+        <div class="flex items-center space-x-4 min-w-0">
+          <div class="flex items-center space-x-2 text-[#949ba4]">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+            <span class="font-bold text-white text-base">Amigos</span>
+          </div>
+
+          <div class="h-5 w-[1px] bg-[#3f4147]"></div>
+
+          <!-- Navigation Pills: Disponível, Todos, Pendente, Convites, Bloqueado, + Adicionar Amigo -->
+          <div class="flex items-center space-x-2 text-sm font-semibold overflow-x-auto no-scrollbar py-1">
+            <button onclick="window.discordApp.switchFriendsTab('online')" id="tabBtnFriendsOnline" class="friends-tab-pill active px-2.5 py-1 rounded text-[#dbdee1] hover:bg-[#35373c] transition whitespace-nowrap">Disponível</button>
+            <button onclick="window.discordApp.switchFriendsTab('all')" id="tabBtnFriendsAll" class="friends-tab-pill px-2.5 py-1 rounded text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c] transition whitespace-nowrap">Todos</button>
+            <button onclick="window.discordApp.switchFriendsTab('pending')" id="tabBtnFriendsPending" class="friends-tab-pill relative px-2.5 py-1 rounded text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c] transition whitespace-nowrap">
+              <span>Pendente</span>
+              <span id="friendsPendingBadge" class="hidden ml-1 px-1.5 py-0.2 text-[10px] bg-[#f23f43] text-white rounded-full font-bold">0</span>
+            </button>
+            <button onclick="window.discordApp.switchFriendsTab('invites')" id="tabBtnFriendsInvites" class="friends-tab-pill relative px-2.5 py-1 rounded text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c] transition whitespace-nowrap flex items-center space-x-1">
+              <span>Convites</span>
+              <span id="tabServerInvitesBadge" class="hidden ml-1 px-1.5 py-0.2 text-[10px] bg-[#f23f43] text-white rounded-full font-bold">0</span>
+            </button>
+            <button onclick="window.discordApp.switchFriendsTab('blocked')" id="tabBtnFriendsBlocked" class="friends-tab-pill px-2.5 py-1 rounded text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c] transition whitespace-nowrap">Bloqueado</button>
+            <button onclick="window.discordApp.switchFriendsTab('add')" id="tabBtnFriendsAdd" class="px-2.5 py-1 rounded bg-[#23a55a] hover:bg-[#1f9250] text-white font-bold transition whitespace-nowrap">Adicionar Amigo</button>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-4 text-[#b5bac1]">
+          <button title="Novo Grupo de Mensagem Direta" class="hover:text-white transition hidden sm:block">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.38 5.08L2.05 21.95c-.15.46.29.9.75.75l4.87-1.33C9.17 21.75 10.55 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-3H8v-2h3V8h2v3h3v2h-3v3z"/></svg>
+          </button>
+          <div class="w-[1px] h-4 bg-[#3f4147] hidden sm:block"></div>
+          <button onclick="window.discordApp.openServerInvitesModal()" title="Caixa de Entrada / Convites" class="relative hover:text-white transition">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 10h-4c0 1.66-1.34 3-3 3s-3-1.34-3-3H5V5h14v8z"/></svg>
+            <span id="inboxNotificationBadge" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#f23f43] rounded-full ring-2 ring-[#313338]"></span>
+          </button>
+          <button title="Ajuda" class="hover:text-white transition hidden sm:block">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 16h-2v-2h2v2zm1.07-7.75l-.9.92C12.45 11.9 12 12.5 12 14h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Friends List Content Pane (Online / All / Blocked) -->
+      <div id="friendsListPane" class="flex-1 overflow-y-auto p-6 space-y-4">
+        <!-- Search bar -->
+        <div class="relative max-w-2xl">
+          <input type="text" id="inputSearchFriends" oninput="window.discordApp.filterFriends(this.value)" placeholder="Buscar" class="w-full bg-[#1e1f22] text-sm text-white rounded-lg px-3 py-2 pr-8 focus:outline-none placeholder-[#949ba4] border border-[#2b2d31]" />
+          <svg class="w-4 h-4 text-[#949ba4] absolute right-3 top-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+
+        <!-- Friends Count Title -->
+        <div id="friendsCountHeading" class="text-xs font-bold uppercase tracking-wider text-[#949ba4]">DISPONÍVEL — 0</div>
+
+        <!-- Friends Cards Container -->
+        <div id="friendsCardsContainer" class="space-y-1 divide-y divide-[#35373c]/30">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Pending Requests Content Pane -->
+      <div id="friendsPendingPane" class="hidden flex-1 overflow-y-auto p-6 space-y-4">
+        <div id="pendingCountHeading" class="text-xs font-bold uppercase tracking-wider text-[#949ba4]">PENDENTE — 0</div>
+        <div id="pendingRequestsContainer" class="space-y-2">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Server Invites Content Pane (Persistent in Home) -->
+      <div id="friendsInvitesPane" class="hidden flex-1 overflow-y-auto p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <div id="invitesCountHeading" class="text-xs font-bold uppercase tracking-wider text-[#949ba4]">CONVITES PARA SERVIDORES — 0</div>
+        </div>
+        <div id="serverInvitesCardsContainer" class="space-y-2">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Add Friend Content Pane -->
+      <div id="friendsAddPane" class="hidden flex-1 overflow-y-auto p-6 space-y-4 max-w-2xl">
+        <div>
+          <h2 class="text-base font-bold text-white uppercase tracking-wide">ADICIONAR AMIGO</h2>
+          <p class="text-xs text-[#949ba4] mt-1">Você pode adicionar amigos com o nome de usuário do Discord.</p>
+        </div>
+
+        <div class="relative bg-[#1e1f22] rounded-xl p-3 border border-[#111214] flex items-center focus-within:border-[#5865f2] transition shadow-inner">
+          <input id="inputAddFriendUsername" type="text" placeholder="Você pode adicionar amigos com o nome de usuário" class="bg-transparent flex-1 text-sm text-white focus:outline-none placeholder-[#949ba4]" autocomplete="off" />
+          <button onclick="window.discordApp.handleAddFriendSubmit()" class="px-4 py-1.5 bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold rounded-lg transition">
+            Enviar pedido de amizade
+          </button>
+        </div>
+
+        <div id="addFriendFeedback" class="hidden p-3 rounded-lg text-xs font-medium"></div>
+
+        <!-- Registered Database Users Section -->
+        <div class="mt-6 pt-4 border-t border-[#35373c]/50">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <div class="text-xs font-bold uppercase tracking-wider text-[#b5bac1]">USUÁRIOS CADASTRADOS NO BANCO DE DADOS</div>
+              <p class="text-[11px] text-[#949ba4]">Adicione com 1 clique as pessoas que criaram conta no seu Firebase</p>
+            </div>
+            <button onclick="window.discordApp.refreshDatabaseUsers()" class="px-2 py-1 bg-[#1e1f22] hover:bg-[#2b2d31] border border-[#35373c] rounded text-xs text-[#00a8fc] font-semibold flex items-center space-x-1 transition" title="Recarregar usuários do banco">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span>Atualizar</span>
+            </button>
+          </div>
+          <div id="registeredUsersContainer" class="space-y-2">
+            <!-- Dynamically populated with all registered users from Firestore -->
+          </div>
+        </div>
+
+        <!-- Help instructions -->
+        <div class="mt-6 pt-4 border-t border-[#35373c]/50 text-xs text-[#949ba4] space-y-2">
+          <div class="font-bold uppercase text-[#b5bac1]">Dica:</div>
+          <p>O nome de usuário diferencia maiúsculas de minúsculas. Compartilhe o seu nome de usuário com amigos para que eles possam te adicionar!</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- WRAPPER: CHAT & GO LIVE (CHANNELS & DMS) -->
+    <div id="chatSectionWrapper" class="flex-1 flex flex-col min-w-0 relative">
+    
+    <!-- Top Header Bar (Desktop) -->
+    <header class="hidden md:flex h-12 border-b border-[#1f2023] px-4 items-center justify-between bg-[#313338] shadow-sm flex-shrink-0 z-10">
       <div class="flex items-center space-x-2 min-w-0">
         <svg class="w-6 h-6 text-[#80848e] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
@@ -189,40 +537,95 @@
     </header>
 
     <!-- ========================================================= -->
-    <!-- GO LIVE SCREEN SHARE STAGE (THEATER MODE) -->
+    <!-- GO LIVE SCREEN SHARE STAGE (THEATER & FULLSCREEN READY) -->
     <!-- ========================================================= -->
-    <div id="goLiveStage" class="hidden flex-col bg-black relative border-b border-[#232428] w-full max-h-[60vh] flex-shrink-0 transition-all">
-      <!-- Live Video Canvas / Video Player -->
-      <div class="relative w-full h-[55vh] flex items-center justify-center bg-[#000] overflow-hidden group">
-        <video id="goLiveVideo" autoplay playsinline class="w-full h-full object-contain max-h-[55vh]"></video>
+    <div id="goLiveStage" class="hidden flex-col bg-black relative border-b border-[#1f2023] w-full flex-shrink-0 transition-all select-none">
+      <!-- Live Video Wrapper -->
+      <div id="stageVideoWrapper" class="stage-video-wrapper relative w-full h-full flex items-center justify-center bg-black overflow-hidden group">
+        <video id="goLiveVideo" autoplay playsinline class="w-full h-full object-contain"></video>
+        <audio id="goLiveDedicatedAudioPlayer" autoplay playsinline class="hidden"></audio>
+
+        <!-- Unmute button if browser autoplay policy blocks unmuted video/audio -->
+        <button id="btnStreamUnmutePrompt" onclick="window.discordStream.unmuteStreamAudio()" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 px-5 py-3 bg-[#5865f2] hover:bg-[#4752c4] text-white font-bold text-sm rounded-xl shadow-2xl flex items-center space-x-2 transition cursor-pointer border border-white/20">
+          <svg class="w-5 h-5 animate-pulse text-[#23a55a]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z"/></svg>
+          <span>🔊 Clique para Ativar o Áudio da Transmissão</span>
+        </button>
 
         <!-- Top Stream Info Overlay -->
-        <div class="absolute top-3 left-4 flex items-center space-x-3 bg-black/60 backdrop-blur px-3 py-1.5 rounded-full z-10">
-          <div class="flex items-center space-x-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-[#f23f43] animate-ping"></span>
-            <span class="text-xs font-bold uppercase tracking-wider text-white">AO VIVO</span>
+        <div id="streamOverlayTop" class="stream-overlay-top">
+          <!-- Left: Live Pill & Stream Info -->
+          <div class="flex items-center space-x-2.5">
+            <div class="stream-pill-tag flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#f23f43] animate-ping"></span>
+              <span class="text-xs font-bold uppercase tracking-wider text-white">AO VIVO</span>
+            </div>
+            
+            <div class="stream-pill-tag flex items-center space-x-2">
+              <div class="avatar-wrap w-5 h-5 flex-shrink-0">
+                <img id="streamerAvatarImg" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" class="w-5 h-5 rounded-full object-cover" alt="Streamer" />
+              </div>
+              <span id="streamerName" class="text-xs font-bold text-white truncate max-w-[120px]">DevMaster</span>
+              <span id="streamChannelName" class="text-xs text-[#949ba4] truncate hidden sm:inline">• Lounge Geral</span>
+            </div>
+
+            <div class="stream-pill-tag hidden md:flex items-center space-x-1.5 text-xs text-[#b5bac1] font-mono">
+              <span id="streamQualityBadge">1080p 60FPS</span>
+            </div>
           </div>
-          <div class="h-3 w-[1px] bg-white/30"></div>
-          <span id="streamQualityBadge" class="text-xs text-[#b5bac1] font-mono">1080p 60FPS</span>
-          <div class="h-3 w-[1px] bg-white/30"></div>
-          <span class="text-xs text-[#23a55a] font-medium flex items-center">
-            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-            <span>Transmitindo</span>
-          </span>
+
+          <!-- Right: Chat toggle button -->
+          <div class="flex items-center space-x-2">
+            <button id="btnToggleStreamChat" class="stream-pill-tag text-xs font-semibold text-[#dbdee1] hover:text-white flex items-center space-x-1.5 transition" title="Ocultar/Mostrar Chat">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+              <span id="streamChatBtnLabel">Chat</span>
+            </button>
+          </div>
         </div>
 
-        <!-- Hover Controls Overlay -->
-        <div class="absolute bottom-3 right-4 flex items-center space-x-2 bg-black/75 backdrop-blur px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10">
-          <button id="btnPip" class="p-2 hover:bg-white/10 rounded text-[#dbdee1] hover:text-white transition" title="Picture in Picture">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-          </button>
-          <button id="btnFullscreen" class="p-2 hover:bg-white/10 rounded text-[#dbdee1] hover:text-white transition" title="Tela Cheia">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
-          </button>
-          <button id="btnStopStream" class="px-3 py-1.5 bg-[#f23f43] hover:bg-[#da373c] text-white text-xs font-bold rounded flex items-center space-x-1.5 transition">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-            <span>Parar Transmissão</span>
-          </button>
+        <!-- Bottom Floating Controls Overlay -->
+        <div id="streamOverlayBottom" class="stream-overlay-bottom">
+          <div class="stream-glass-bar flex items-center space-x-3 text-[#dbdee1]">
+            
+            <!-- Volume Control -->
+            <div class="flex items-center space-x-1.5 group/vol">
+              <button id="btnStreamVolume" class="p-1.5 hover:bg-white/10 rounded-lg hover:text-white transition" title="Mudo / Volume">
+                <svg id="iconStreamVolume" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z"/>
+                </svg>
+              </button>
+              <input id="streamVolumeSlider" type="range" min="0" max="1" step="0.05" value="1" class="stream-volume-slider cursor-pointer" title="Volume da Transmissão" />
+            </div>
+
+            <div class="h-4 w-[1px] bg-white/15"></div>
+
+            <!-- Aspect ratio toggle -->
+            <button id="btnStreamAspect" class="p-1.5 hover:bg-white/10 rounded-lg hover:text-white transition" title="Alternar Ajustar/Preencher Tela">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+            </button>
+
+            <!-- Picture-in-Picture -->
+            <button id="btnPip" class="p-1.5 hover:bg-white/10 rounded-lg hover:text-white transition" title="Picture in Picture">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            </button>
+
+            <!-- Modo Teatro (Expand view) -->
+            <button id="btnTheaterMode" class="p-1.5 hover:bg-white/10 rounded-lg hover:text-white transition" title="Modo Foco / Teatro">
+              <svg id="iconTheater" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            </button>
+
+            <!-- Fullscreen Button -->
+            <button id="btnFullscreen" class="p-1.5 hover:bg-white/10 rounded-lg hover:text-white transition" title="Tela Cheia (F)">
+              <svg id="iconFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+            </button>
+
+            <div class="h-4 w-[1px] bg-white/15"></div>
+
+            <!-- Stop/Leave button -->
+            <button id="btnStopStream" class="px-3 py-1.5 bg-[#f23f43] hover:bg-[#da373c] text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 transition shadow">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+              <span id="btnStopStreamText">Parar Transmissão</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -312,16 +715,40 @@
         </div>
       </div>
     </div>
+    </div> <!-- /chatSectionWrapper -->
   </main>
 
+  <!-- Backdrop for Mobile Members Sidebar -->
+  <div id="mobileMembersBackdrop" onclick="window.discordApp.closeMobileMembers()" class="fixed inset-0 bg-black/60 z-40 hidden md:hidden transition-opacity"></div>
+
   <!-- ========================================================= -->
-  <!-- 4. RIGHT MEMBERS SIDEBAR (240px) -->
+  <!-- 4. RIGHT MEMBERS SIDEBAR (240px) (Drawer on mobile) -->
   <!-- ========================================================= -->
-  <aside id="membersSidebar" class="w-60 bg-[#2b2d31] flex flex-col flex-shrink-0 overflow-y-auto select-none border-l border-[#1f2023]/50">
+  <aside id="membersSidebar" class="fixed inset-y-0 right-0 z-50 transform transition-transform duration-300 translate-x-full md:translate-x-0 md:static md:z-10 w-60 bg-[#2b2d31] flex flex-col flex-shrink-0 overflow-y-auto select-none border-l border-[#1f2023]/50 h-full shadow-2xl md:shadow-none">
     <div id="membersListContainer" class="py-2">
       <!-- Populated dynamically by app.js -->
     </div>
   </aside>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: PENDING SERVER INVITES -->
+  <!-- ========================================================= -->
+  <div id="pendingServerInvitesModal" class="hidden fixed inset-0 z-[120] modal-overlay items-center justify-center p-4">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden text-[#dbdee1]">
+      <div class="px-6 py-4 border-b border-[#232428] flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">🔔</span>
+          <h2 class="text-base font-bold text-white">Convites para Servidores</h2>
+        </div>
+        <button onclick="window.discordApp.closeServerInvitesModal()" class="text-[#949ba4] hover:text-white p-1 rounded">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="modalServerInvitesList" class="p-4 space-y-3 max-h-96 overflow-y-auto">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+  </div>
 
   <!-- ========================================================= -->
   <!-- MODAL: GO LIVE (SCREEN SHARE SELECTION) -->
@@ -412,9 +839,20 @@
         <div class="text-xs font-bold uppercase tracking-wider text-[#949ba4] px-2">CONFIGURAÇÕES DE USUÁRIO</div>
         <div class="space-y-1">
           <button data-tab="account" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold bg-[#35373c] text-white transition">Minha Conta</button>
+          <button data-tab="profile" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold text-[#b5bac1] hover:bg-[#35373c] hover:text-white transition flex items-center justify-between">
+            <span>Perfis & Molduras</span>
+            <span class="text-[10px] bg-[#f47fff] text-black font-bold px-1.5 py-0.2 rounded-full uppercase">NOVO</span>
+          </button>
           <button data-tab="voice-video" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold text-[#b5bac1] hover:bg-[#35373c] hover:text-white transition">Voz e Vídeo</button>
           <button data-tab="appearance" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold text-[#b5bac1] hover:bg-[#35373c] hover:text-white transition">Aparência</button>
           <button data-tab="about" class="settings-tab-btn w-full text-left px-3 py-2 rounded text-sm font-semibold text-[#b5bac1] hover:bg-[#35373c] hover:text-white transition">Sobre o Projeto</button>
+          
+          <div class="pt-3 mt-3 border-t border-[#35373c]">
+            <button onclick="window.discordApp.handleLogout()" class="w-full text-left px-3 py-2 rounded text-sm font-semibold text-[#f23f43] hover:bg-[#da373c]/15 transition flex items-center justify-between group">
+              <span>Sair da Conta</span>
+              <svg class="w-4 h-4 text-[#f23f43] group-hover:translate-x-0.5 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            </button>
+          </div>
         </div>
       </div>
       <div class="pt-4 border-t border-[#35373c]">
@@ -426,7 +864,7 @@
     </div>
 
     <!-- Settings Content Area -->
-    <div class="flex-1 p-8 overflow-y-auto max-w-2xl text-[#dbdee1]">
+    <div class="flex-1 p-8 overflow-y-auto max-w-4xl text-[#dbdee1]">
       <!-- Tab: Minha Conta -->
       <div id="tab-account" class="settings-tab-pane space-y-6">
         <h2 class="text-2xl font-bold text-white">Minha Conta</h2>
@@ -449,6 +887,233 @@
             <input id="inputSettingCustomStatus" type="text" class="w-full bg-[#383a40] text-white px-3 py-2 rounded text-sm focus:outline-none" />
           </div>
           <button id="btnSaveProfile" class="px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-bold text-sm rounded shadow transition">Salvar Alterações</button>
+        </div>
+
+        <!-- Sessão da Conta / Logout -->
+        <div class="bg-[#1e1f22] p-5 rounded-xl border border-red-500/20 space-y-3">
+          <div class="text-xs font-bold uppercase tracking-wider text-red-400">SESSÃO DA CONTA</div>
+          <p class="text-xs text-[#949ba4]">Deseja encerrar sua sessão neste navegador? Você precisará fazer login novamente com seu usuário e senha.</p>
+          <button onclick="window.discordApp.handleLogout()" class="px-5 py-2 bg-[#da373c] hover:bg-[#a1282c] text-white font-bold text-sm rounded shadow transition flex items-center space-x-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            <span>Sair da Conta</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab: Perfis & Molduras (NOVO) -->
+      <div id="tab-profile" class="settings-tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-2xl font-bold text-white">Perfil & Molduras de Avatar</h2>
+          <p class="text-xs text-[#949ba4] mt-1">Personalize sua aparência, moldura animada de avatar e status de presença.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <!-- Left: Customization Controls (7 cols) -->
+          <div class="lg:col-span-7 space-y-6">
+            
+            <!-- 1. Moldura de Perfil (Avatar Decorations) -->
+            <div class="bg-[#1e1f22] p-5 rounded-xl border border-[#2b2d31] space-y-3">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-bold uppercase tracking-wider text-[#949ba4]">MOLDURA DE PERFIL (DECORAÇÃO DO AVATAR)</label>
+                <span id="currentDecorationLabel" class="text-xs font-bold text-[#f47fff]">Cyberpunk Neon</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                <!-- None -->
+                <button onclick="window.discordApp.selectDecoration('none', 'Nenhuma')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border border-[#3f4147] hover:border-white bg-[#2b2d31] text-xs font-semibold transition" data-decoration="none">
+                  <div class="w-10 h-10 rounded-full bg-[#383a40] mb-1 flex items-center justify-center text-[#949ba4]">🚫</div>
+                  <span>Nenhuma</span>
+                </button>
+                <!-- Cyberpunk -->
+                <button onclick="window.discordApp.selectDecoration('cyberpunk', 'Cyberpunk Neon')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border-2 border-[#00f0ff] bg-[#2b2d31] text-xs font-semibold transition" data-decoration="cyberpunk">
+                  <div class="avatar-wrap w-10 h-10 mb-1">
+                    <div class="avatar-decoration-overlay decoration-cyberpunk"></div>
+                    <div class="w-8 h-8 rounded-full bg-[#00f0ff]/20 flex items-center justify-center text-xs">⚡</div>
+                  </div>
+                  <span class="text-[#00f0ff]">Cyberpunk</span>
+                </button>
+                <!-- Fire -->
+                <button onclick="window.discordApp.selectDecoration('fire', 'Chamas Ardentes')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border border-[#3f4147] hover:border-[#ff4500] bg-[#2b2d31] text-xs font-semibold transition" data-decoration="fire">
+                  <div class="avatar-wrap w-10 h-10 mb-1">
+                    <div class="avatar-decoration-overlay decoration-fire"></div>
+                    <div class="w-8 h-8 rounded-full bg-[#ff4500]/20 flex items-center justify-center text-xs">🔥</div>
+                  </div>
+                  <span class="text-[#ff9900]">Chamas</span>
+                </button>
+                <!-- Magic -->
+                <button onclick="window.discordApp.selectDecoration('magic', 'Magia Arcana')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border border-[#3f4147] hover:border-[#a855f7] bg-[#2b2d31] text-xs font-semibold transition" data-decoration="magic">
+                  <div class="avatar-wrap w-10 h-10 mb-1">
+                    <div class="avatar-decoration-overlay decoration-magic"></div>
+                    <div class="w-8 h-8 rounded-full bg-[#a855f7]/20 flex items-center justify-center text-xs">🔮</div>
+                  </div>
+                  <span class="text-[#c084fc]">Magia</span>
+                </button>
+                <!-- Sakura -->
+                <button onclick="window.discordApp.selectDecoration('sakura', 'Flores de Sakura')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border border-[#3f4147] hover:border-[#f472b6] bg-[#2b2d31] text-xs font-semibold transition" data-decoration="sakura">
+                  <div class="avatar-wrap w-10 h-10 mb-1">
+                    <div class="avatar-decoration-overlay decoration-sakura"></div>
+                    <div class="w-8 h-8 rounded-full bg-[#f472b6]/20 flex items-center justify-center text-xs">🌸</div>
+                  </div>
+                  <span class="text-[#f472b6]">Sakura</span>
+                </button>
+                <!-- Pixel -->
+                <button onclick="window.discordApp.selectDecoration('pixel', 'Pixel Gamer 8-Bit')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border border-[#3f4147] hover:border-[#10b981] bg-[#2b2d31] text-xs font-semibold transition" data-decoration="pixel">
+                  <div class="avatar-wrap w-10 h-10 mb-1">
+                    <div class="avatar-decoration-overlay decoration-pixel"></div>
+                    <div class="w-8 h-8 rounded-full bg-[#10b981]/20 flex items-center justify-center text-xs">👾</div>
+                  </div>
+                  <span class="text-[#10b981]">Pixel Gamer</span>
+                </button>
+                <!-- Gold -->
+                <button onclick="window.discordApp.selectDecoration('gold', 'Coroa VIP Real')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border border-[#3f4147] hover:border-[#fbbf24] bg-[#2b2d31] text-xs font-semibold transition" data-decoration="gold">
+                  <div class="avatar-wrap w-10 h-10 mb-1">
+                    <div class="avatar-decoration-overlay decoration-gold"></div>
+                    <div class="w-8 h-8 rounded-full bg-[#fbbf24]/20 flex items-center justify-center text-xs">👑</div>
+                  </div>
+                  <span class="text-[#fbbf24]">Ouro VIP</span>
+                </button>
+                <!-- Cat -->
+                <button onclick="window.discordApp.selectDecoration('cat', 'Orelhas de Gatinho')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border border-[#3f4147] hover:border-[#ec4899] bg-[#2b2d31] text-xs font-semibold transition" data-decoration="cat">
+                  <div class="avatar-wrap w-10 h-10 mb-1">
+                    <div class="avatar-decoration-overlay decoration-cat"></div>
+                    <div class="w-8 h-8 rounded-full bg-[#ec4899]/20 flex items-center justify-center text-xs">🐱</div>
+                  </div>
+                  <span class="text-[#ec4899]">Gatinho</span>
+                </button>
+                <!-- Galaxy -->
+                <button onclick="window.discordApp.selectDecoration('galaxy', 'Galáxia Cósmica')" class="decoration-opt-btn flex flex-col items-center p-2 rounded-lg border border-[#3f4147] hover:border-[#818cf8] bg-[#2b2d31] text-xs font-semibold transition" data-decoration="galaxy">
+                  <div class="avatar-wrap w-10 h-10 mb-1">
+                    <div class="avatar-decoration-overlay decoration-galaxy"></div>
+                    <div class="w-8 h-8 rounded-full bg-[#818cf8]/20 flex items-center justify-center text-xs">🌌</div>
+                  </div>
+                  <span class="text-[#818cf8]">Galáxia</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. Status do Perfil (Online, Ausente, Ocupado, Offline) -->
+            <div class="bg-[#1e1f22] p-5 rounded-xl border border-[#2b2d31] space-y-3">
+              <label class="block text-xs font-bold uppercase tracking-wider text-[#949ba4]">STATUS DO PERFIL</label>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <!-- Online -->
+                <button onclick="window.discordApp.selectStatusOption('online')" class="status-opt-btn flex items-center space-x-2 p-2.5 rounded-lg border border-[#3f4147] bg-[#2b2d31] hover:border-[#23a55a] text-xs font-semibold transition" data-status="online">
+                  <span class="w-3 h-3 rounded-full bg-[#23a55a] flex-shrink-0"></span>
+                  <span class="truncate">Online</span>
+                </button>
+                <!-- Ausente -->
+                <button onclick="window.discordApp.selectStatusOption('idle')" class="status-opt-btn flex items-center space-x-2 p-2.5 rounded-lg border border-[#3f4147] bg-[#2b2d31] hover:border-[#f0b232] text-xs font-semibold transition" data-status="idle">
+                  <span class="w-3 h-3 rounded-full bg-[#f0b232] flex-shrink-0"></span>
+                  <span class="truncate">Ausente</span>
+                </button>
+                <!-- Ocupado -->
+                <button onclick="window.discordApp.selectStatusOption('dnd')" class="status-opt-btn flex items-center space-x-2 p-2.5 rounded-lg border border-[#3f4147] bg-[#2b2d31] hover:border-[#f23f43] text-xs font-semibold transition" data-status="dnd">
+                  <span class="w-3 h-3 rounded-full bg-[#f23f43] flex items-center justify-center flex-shrink-0">
+                    <span class="w-1.5 h-0.5 bg-white rounded"></span>
+                  </span>
+                  <span class="truncate">Ocupado</span>
+                </button>
+                <!-- Offline -->
+                <button onclick="window.discordApp.selectStatusOption('offline')" class="status-opt-btn flex items-center space-x-2 p-2.5 rounded-lg border border-[#3f4147] bg-[#2b2d31] hover:border-[#80848e] text-xs font-semibold transition" data-status="offline">
+                  <span class="w-3 h-3 rounded-full border-2 border-[#80848e] flex-shrink-0"></span>
+                  <span class="truncate">Invisível</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. Banner & Pronomes -->
+            <div class="bg-[#1e1f22] p-5 rounded-xl border border-[#2b2d31] space-y-4">
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-[#949ba4] mb-2">COR DO BANNER DO PERFIL</label>
+                <div class="flex items-center space-x-3">
+                  <button onclick="window.discordApp.selectBannerColor('#5865F2')" class="banner-color-btn w-8 h-8 rounded-full border-2 border-white transition transform hover:scale-110" style="background-color: #5865F2;"></button>
+                  <button onclick="window.discordApp.selectBannerColor('#23A55A')" class="banner-color-btn w-8 h-8 rounded-full border-2 border-transparent transition transform hover:scale-110" style="background-color: #23A55A;"></button>
+                  <button onclick="window.discordApp.selectBannerColor('#F23F43')" class="banner-color-btn w-8 h-8 rounded-full border-2 border-transparent transition transform hover:scale-110" style="background-color: #F23F43;"></button>
+                  <button onclick="window.discordApp.selectBannerColor('#F0B232')" class="banner-color-btn w-8 h-8 rounded-full border-2 border-transparent transition transform hover:scale-110" style="background-color: #F0B232;"></button>
+                  <button onclick="window.discordApp.selectBannerColor('#9333EA')" class="banner-color-btn w-8 h-8 rounded-full border-2 border-transparent transition transform hover:scale-110" style="background-color: #9333EA;"></button>
+                  <button onclick="window.discordApp.selectBannerColor('#111214')" class="banner-color-btn w-8 h-8 rounded-full border-2 border-transparent transition transform hover:scale-110" style="background-color: #111214;"></button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-[#949ba4] mb-1">PRONOMES</label>
+                <input id="inputProfilePronouns" type="text" placeholder="ele/dele, ela/dela, they/them" class="w-full bg-[#383a40] text-white px-3 py-2 rounded text-sm focus:outline-none" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-[#949ba4] mb-1">SOBRE MIM (BIO)</label>
+                <textarea id="inputProfileBio" rows="3" placeholder="Conte um pouco sobre você..." class="w-full bg-[#383a40] text-white px-3 py-2 rounded text-sm focus:outline-none resize-none"></textarea>
+              </div>
+
+              <div class="pt-2">
+                <button onclick="window.discordApp.saveProfileCustomization()" class="px-6 py-2.5 bg-[#5865f2] hover:bg-[#4752c4] text-white font-bold text-sm rounded shadow transition flex items-center space-x-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                  <span>Salvar Alterações do Perfil</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Right: Live Discord Profile Preview Card (5 cols) -->
+          <div class="lg:col-span-5 space-y-3 sticky top-0">
+            <div class="text-xs font-bold uppercase tracking-wider text-[#949ba4]">PRÉ-VISUALIZAÇÃO AO VIVO</div>
+            
+            <!-- Exact Discord Profile Card Preview -->
+            <div class="bg-[#232428] border border-[#1e1f22] rounded-2xl shadow-2xl overflow-hidden text-[#dbdee1] w-full max-w-sm mx-auto">
+              <!-- Banner -->
+              <div id="previewCardBanner" class="h-28 w-full transition-colors relative" style="background-color: #5865F2;">
+                <div class="absolute top-2 right-2 flex space-x-1">
+                  <span class="bg-black/40 backdrop-blur text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Discord Nitro</span>
+                </div>
+              </div>
+
+              <!-- Card Body -->
+              <div class="px-4 pb-4 relative">
+                <!-- Avatar with Decoration -->
+                <div class="relative -top-12 mb-[-36px] inline-block">
+                  <div class="avatar-wrap w-20 h-20">
+                    <div id="previewCardDecoration" class="avatar-decoration-overlay decoration-cyberpunk"></div>
+                    <img id="previewCardAvatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" class="w-20 h-20 rounded-full border-4 border-[#232428] object-cover relative z-0" alt="Preview Avatar" />
+                    <div id="previewCardStatus" class="status-indicator online w-5 h-5 border-[3px]"></div>
+                  </div>
+                </div>
+
+                <!-- Names & Pronouns -->
+                <div class="mt-2 space-y-0.5">
+                  <div class="flex items-center space-x-2">
+                    <h3 id="previewCardDisplayName" class="text-xl font-bold text-white">DevMaster</h3>
+                    <span id="previewCardPronouns" class="text-xs text-[#949ba4] bg-[#1e1f22] px-2 py-0.5 rounded">ele/dele</span>
+                  </div>
+                  <div id="previewCardUsername" class="text-xs text-[#949ba4]">devmaster_ #1337</div>
+                </div>
+
+                <!-- Custom Status Pill -->
+                <div class="mt-3 py-1.5 px-2.5 bg-[#1e1f22] rounded-md text-xs text-[#dbdee1] flex items-center space-x-1.5 border border-[#2b2d31]">
+                  <span>💬</span>
+                  <span id="previewCardCustomStatus" class="truncate">Construindo o Discord Clone 🚀</span>
+                </div>
+
+                <!-- Divider & Bio -->
+                <div class="mt-3 pt-3 border-t border-[#35373c] space-y-2">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-[#949ba4]">SOBRE MIM</div>
+                  <p id="previewCardBio" class="text-xs text-[#dbdee1] leading-relaxed">Desenvolvedor Full Stack apaixonado por tecnologia e inovação.</p>
+                  
+                  <!-- Badges -->
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] pt-1">DISTINTIVOS</div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <span class="bg-[#1e1f22] border border-[#35373c] text-white text-[11px] font-semibold px-2 py-0.5 rounded flex items-center space-x-1">
+                      <span>👑</span> <span>Dono</span>
+                    </span>
+                    <span class="bg-[#1e1f22] border border-[#35373c] text-[#f47fff] text-[11px] font-semibold px-2 py-0.5 rounded flex items-center space-x-1">
+                      <span>💎</span> <span>Nitro</span>
+                    </span>
+                    <span class="bg-[#1e1f22] border border-[#35373c] text-[#00f0ff] text-[11px] font-semibold px-2 py-0.5 rounded flex items-center space-x-1">
+                      <span>⚡</span> <span>Dev Ativo</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -553,34 +1218,505 @@
   </div>
 
   <!-- ========================================================= -->
-  <!-- MODAL: MEMBER PROFILE CARD -->
+  <!-- MODAL: SERVER SETTINGS (CONFIGURAÇÕES DO SERVIDOR) -->
   <!-- ========================================================= -->
-  <div id="memberProfileModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4">
-    <div class="modal-content bg-[#232428] border border-[#1e1f22] w-80 rounded-2xl shadow-2xl overflow-hidden text-[#dbdee1]">
-      <div class="h-20 bg-[#5865f2] relative">
-        <button id="closeMemberProfileModal" class="absolute top-2 right-2 p-1 text-white/80 hover:text-white rounded-full bg-black/20">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
+  <div id="serverSettingsModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4 bg-black/75">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-5xl h-[88vh] rounded-2xl shadow-2xl flex overflow-hidden text-[#dbdee1]">
+      <!-- Left Navigation Sidebar (240px) -->
+      <div class="w-60 bg-[#2b2d31] p-4 flex flex-col justify-between flex-shrink-0 border-r border-[#232428]">
+        <div class="space-y-1">
+          <div id="serverSettingsSidebarTitle" class="text-xs font-bold uppercase tracking-wider text-[#949ba4] px-2.5 py-1.5 truncate">
+            Comunidade Dev & Tech
+          </div>
+          <button onclick="window.discordApp.switchServerSettingsTab('overview')" class="server-settings-tab-btn w-full text-left px-3 py-2 rounded-md font-medium text-sm flex items-center space-x-2.5 transition bg-[#35373c] text-white" data-tab="overview">
+            <svg class="w-4 h-4 text-[#949ba4]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span>Visão Geral</span>
+          </button>
+          <button onclick="window.discordApp.switchServerSettingsTab('roles')" class="server-settings-tab-btn w-full text-left px-3 py-2 rounded-md font-medium text-sm flex items-center space-x-2.5 transition text-[#949ba4] hover:bg-[#35373c]/50 hover:text-white" data-tab="roles">
+            <svg class="w-4 h-4 text-[#949ba4]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            <span>Cargos</span>
+          </button>
+          <button onclick="window.discordApp.switchServerSettingsTab('members')" class="server-settings-tab-btn w-full text-left px-3 py-2 rounded-md font-medium text-sm flex items-center space-x-2.5 transition text-[#949ba4] hover:bg-[#35373c]/50 hover:text-white" data-tab="members">
+            <svg class="w-4 h-4 text-[#949ba4]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <span>Membros</span>
+          </button>
+          <button onclick="window.discordApp.switchServerSettingsTab('bans')" class="server-settings-tab-btn w-full text-left px-3 py-2 rounded-md font-medium text-sm flex items-center space-x-2.5 transition text-[#949ba4] hover:bg-[#35373c]/50 hover:text-white" data-tab="bans">
+            <svg class="w-4 h-4 text-[#949ba4]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+            <span>Banimentos</span>
+          </button>
+        </div>
+
+        <div class="pt-4 border-t border-[#232428] space-y-1">
+          <button onclick="window.discordApp.deleteCurrentServer()" class="w-full text-left px-3 py-2 rounded-md font-medium text-sm text-[#f23f43] hover:bg-[#f23f43]/10 flex items-center justify-between transition">
+            <span>Excluir Servidor</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="px-4 pb-4 relative">
-        <div class="relative -top-10 mb--10">
-          <img id="profileModalAvatar" src="" class="w-20 h-20 rounded-full border-4 border-[#232428] object-cover" alt="Profile" />
+
+      <!-- Right Content Area -->
+      <div class="flex-1 flex flex-col overflow-hidden relative">
+        <!-- Close ESC Button -->
+        <button onclick="window.discordApp.closeServerSettings()" class="absolute top-6 right-6 z-20 flex flex-col items-center group cursor-pointer">
+          <div class="w-8 h-8 rounded-full border-2 border-[#b5bac1] group-hover:border-white flex items-center justify-center transition">
+            <svg class="w-4 h-4 text-[#b5bac1] group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </div>
+          <span class="text-[11px] font-bold text-[#b5bac1] group-hover:text-white mt-1">ESC</span>
+        </button>
+
+        <!-- ========================================== -->
+        <!-- PANE 1: VISÃO GERAL (OVERVIEW) -->
+        <!-- ========================================== -->
+        <div id="serverPane-overview" class="server-pane flex-1 overflow-y-auto p-8 space-y-6">
+          <div>
+            <h2 class="text-2xl font-bold text-white">Visão Geral do Servidor</h2>
+            <p class="text-xs text-[#949ba4] mt-1">Configure o nome, ícone e propriedades básicas do seu servidor.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Icon preview / upload -->
+            <div class="flex flex-col items-center space-y-3 p-4 bg-[#2b2d31] rounded-xl border border-[#232428]">
+              <div id="serverSettingsIconPreview" class="w-24 h-24 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold text-2xl shadow-lg overflow-hidden border-2 border-white/20">
+                CD
+              </div>
+              <div class="text-xs text-[#949ba4] text-center">Ícone do Servidor</div>
+              <input id="serverSettingsIconUrl" type="text" placeholder="https://exemplo.com/icone.png" class="w-full bg-[#1e1f22] text-xs text-white px-2.5 py-1.5 rounded border border-[#3f4147] focus:outline-none focus:border-[#5865f2]" />
+            </div>
+
+            <!-- Server Name & Info -->
+            <div class="md:col-span-2 space-y-4">
+              <div>
+                <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1.5">NOME DO SERVIDOR</label>
+                <input id="serverSettingsNameInput" type="text" class="w-full bg-[#1e1f22] text-white text-sm px-3.5 py-2.5 rounded-lg border border-[#3f4147] focus:outline-none focus:border-[#5865f2]" placeholder="Nome do servidor" />
+              </div>
+
+              <div class="bg-[#2b2d31] p-4 rounded-xl border border-[#232428] space-y-2">
+                <div class="text-xs font-bold uppercase text-[#949ba4]">ESTATÍSTICAS DO SERVIDOR</div>
+                <div class="grid grid-cols-3 gap-2 text-center pt-2">
+                  <div class="bg-[#1e1f22] p-2.5 rounded-lg">
+                    <div id="serverStatsMembers" class="text-lg font-bold text-white">5</div>
+                    <div class="text-[11px] text-[#949ba4]">Membros</div>
+                  </div>
+                  <div class="bg-[#1e1f22] p-2.5 rounded-lg">
+                    <div id="serverStatsRoles" class="text-lg font-bold text-white">4</div>
+                    <div class="text-[11px] text-[#949ba4]">Cargos</div>
+                  </div>
+                  <div class="bg-[#1e1f22] p-2.5 rounded-lg">
+                    <div id="serverStatsBans" class="text-lg font-bold text-white">1</div>
+                    <div class="text-[11px] text-[#949ba4]">Banidos</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-[#2b2d31] flex justify-end">
+            <button onclick="window.discordApp.saveServerOverview()" class="px-6 py-2.5 bg-[#5865f2] hover:bg-[#4752c4] text-white font-semibold text-sm rounded-lg transition shadow-lg">
+              Salvar Alterações
+            </button>
+          </div>
         </div>
-        <div class="mt-[-28px]">
-          <h3 id="profileModalName" class="text-lg font-bold text-white">Username</h3>
-          <span id="profileModalTag" class="text-xs text-[#949ba4]">#0000</span>
+
+        <!-- ========================================== -->
+        <!-- PANE 2: CARGOS (ROLES MANAGER) -->
+        <!-- ========================================== -->
+        <div id="serverPane-roles" class="server-pane hidden flex-1 flex overflow-hidden">
+          <!-- Roles Left Sublist (230px) -->
+          <div class="w-60 bg-[#2b2d31] p-4 flex flex-col flex-shrink-0 border-r border-[#232428]">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-bold uppercase text-[#949ba4]">CARGOS</span>
+              <button onclick="window.discordApp.createNewRole()" class="p-1 hover:bg-[#35373c] text-[#949ba4] hover:text-white rounded transition" title="Criar Cargo">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              </button>
+            </div>
+            <div id="rolesListContainer" class="flex-1 overflow-y-auto space-y-1">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Roles Right Editor -->
+          <div class="flex-1 overflow-y-auto p-8 space-y-6">
+            <div class="flex items-center justify-between pb-4 border-b border-[#2b2d31]">
+              <div class="flex items-center space-x-3">
+                <span id="roleEditColorBadge" class="w-4 h-4 rounded-full bg-[#f23f43]"></span>
+                <h3 id="roleEditTitle" class="text-xl font-bold text-white">Editar Cargo</h3>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button id="btnDeleteRole" onclick="window.discordApp.deleteCurrentRole()" class="px-3 py-1.5 text-xs font-semibold text-[#f23f43] hover:bg-[#f23f43]/10 rounded transition">
+                  Excluir Cargo
+                </button>
+                <button onclick="window.discordApp.saveRoleChanges()" class="px-4 py-1.5 bg-[#23a55a] hover:bg-[#1f9250] text-white text-xs font-bold rounded transition">
+                  Salvar Cargo
+                </button>
+              </div>
+            </div>
+
+            <!-- Role Name -->
+            <div>
+              <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1.5">NOME DO CARGO</label>
+              <input id="roleEditName" type="text" class="w-full bg-[#1e1f22] text-white text-sm px-3.5 py-2.5 rounded-lg border border-[#3f4147] focus:outline-none focus:border-[#5865f2]" />
+            </div>
+
+            <!-- Role Color -->
+            <div>
+              <label class="block text-xs font-bold uppercase text-[#949ba4] mb-2">COR DO CARGO</label>
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" onclick="window.discordApp.selectRoleColor('#5865f2')" class="w-8 h-8 rounded-full bg-[#5865f2] border-2 border-transparent hover:scale-110 transition"></button>
+                <button type="button" onclick="window.discordApp.selectRoleColor('#23a55a')" class="w-8 h-8 rounded-full bg-[#23a55a] border-2 border-transparent hover:scale-110 transition"></button>
+                <button type="button" onclick="window.discordApp.selectRoleColor('#f0b232')" class="w-8 h-8 rounded-full bg-[#f0b232] border-2 border-transparent hover:scale-110 transition"></button>
+                <button type="button" onclick="window.discordApp.selectRoleColor('#f23f43')" class="w-8 h-8 rounded-full bg-[#f23f43] border-2 border-transparent hover:scale-110 transition"></button>
+                <button type="button" onclick="window.discordApp.selectRoleColor('#9b59b6')" class="w-8 h-8 rounded-full bg-[#9b59b6] border-2 border-transparent hover:scale-110 transition"></button>
+                <button type="button" onclick="window.discordApp.selectRoleColor('#e91e63')" class="w-8 h-8 rounded-full bg-[#e91e63] border-2 border-transparent hover:scale-110 transition"></button>
+                <button type="button" onclick="window.discordApp.selectRoleColor('#1abc9c')" class="w-8 h-8 rounded-full bg-[#1abc9c] border-2 border-transparent hover:scale-110 transition"></button>
+                <button type="button" onclick="window.discordApp.selectRoleColor('#949ba4')" class="w-8 h-8 rounded-full bg-[#949ba4] border-2 border-transparent hover:scale-110 transition"></button>
+                <div class="flex items-center space-x-2 pl-2">
+                  <span class="text-xs text-[#949ba4]">Personalizado:</span>
+                  <input id="roleEditColorPicker" type="color" value="#5865f2" onchange="window.discordApp.selectRoleColor(this.value)" class="w-8 h-8 bg-transparent cursor-pointer rounded overflow-hidden" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Hoist switch -->
+            <div class="p-4 bg-[#2b2d31] rounded-xl flex items-center justify-between border border-[#232428]">
+              <div>
+                <div class="font-bold text-white text-sm">Exibir membros do cargo separadamente dos membros online</div>
+                <div class="text-xs text-[#949ba4]">Separa a lista de membros de acordo com a hierarquia deste cargo.</div>
+              </div>
+              <label class="discord-switch">
+                <input id="roleEditHoist" type="checkbox">
+                <span class="discord-switch-track"><span class="discord-switch-thumb"></span></span>
+              </label>
+            </div>
+
+            <!-- Permissions Checklist -->
+            <div class="space-y-4 pt-2">
+              <h4 class="text-sm font-bold uppercase tracking-wider text-[#949ba4]">PERMISSÕES DO CARGO</h4>
+              <div id="rolePermissionsContainer" class="space-y-3">
+                <!-- Populated dynamically from DISCORD_PERMISSIONS -->
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="mt-3 pt-3 border-t border-[#35373c] space-y-2">
-          <div class="text-[11px] font-bold uppercase text-[#949ba4]">SOBRE MIM</div>
-          <div id="profileModalAbout" class="text-xs text-[#dbdee1]">Status info</div>
-          <div class="text-[11px] font-bold uppercase text-[#949ba4] pt-2">DISTINTIVOS</div>
-          <div id="profileModalBadges" class="flex flex-wrap gap-1"></div>
+
+        <!-- ========================================== -->
+        <!-- PANE 3: MEMBROS (MEMBER & MODERATION MANAGER) -->
+        <!-- ========================================== -->
+        <div id="serverPane-members" class="server-pane hidden flex-1 overflow-y-auto p-8 space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-2xl font-bold text-white">Membros do Servidor</h2>
+              <p id="serverMembersSubtitle" class="text-xs text-[#949ba4] mt-1">Gerencie os membros, atribua cargos e aplique moderações.</p>
+            </div>
+            <!-- Search members input -->
+            <div class="relative w-64">
+              <input id="serverMemberSearchInput" oninput="window.discordApp.filterServerMembers(this.value)" type="text" placeholder="Buscar membros..." class="w-full bg-[#1e1f22] text-white text-xs px-3 py-2 rounded-lg border border-[#3f4147] focus:outline-none focus:border-[#5865f2]" />
+            </div>
+          </div>
+
+          <!-- Members List Table -->
+          <div id="serverSettingsMembersContainer" class="space-y-2">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- PANE 4: BANIMENTOS (BANS LIST) -->
+        <!-- ========================================== -->
+        <div id="serverPane-bans" class="server-pane hidden flex-1 overflow-y-auto p-8 space-y-6">
+          <div>
+            <h2 class="text-2xl font-bold text-white">Banimentos</h2>
+            <p id="serverBansSubtitle" class="text-xs text-[#949ba4] mt-1">Membros banidos não podem reentrar no servidor até que seu banimento seja revogado.</p>
+          </div>
+
+          <div id="serverSettingsBansContainer" class="space-y-2">
+            <!-- Populated dynamically -->
+          </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- ========================================================= -->
+  <!-- MODAL: TIMEOUT (CASTIGO) -->
+  <!-- ========================================================= -->
+  <div id="timeoutModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4 bg-black/75">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-md rounded-xl shadow-2xl p-6 text-[#dbdee1] space-y-5">
+      <div class="flex items-center space-x-3">
+        <img id="timeoutModalAvatar" src="" class="w-12 h-12 rounded-full object-cover border-2 border-[#232428]" alt="User" />
+        <div>
+          <h3 id="timeoutModalTitle" class="text-lg font-bold text-white">Colocar Usuário de Castigo</h3>
+          <p class="text-xs text-[#949ba4]">O membro não poderá enviar mensagens nem falar em chamadas.</p>
+        </div>
+      </div>
+
+      <!-- Duration Selector Pills -->
+      <div>
+        <label class="block text-xs font-bold uppercase text-[#949ba4] mb-2">DURAÇÃO DO CASTIGO</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" onclick="window.discordApp.selectTimeoutDuration(60, this)" class="timeout-dur-btn p-2.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-xs font-medium text-center border-2 border-[#5865f2] text-white">60 Segundos</button>
+          <button type="button" onclick="window.discordApp.selectTimeoutDuration(300, this)" class="timeout-dur-btn p-2.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-xs font-medium text-center border-2 border-transparent text-[#dbdee1]">5 Minutos</button>
+          <button type="button" onclick="window.discordApp.selectTimeoutDuration(600, this)" class="timeout-dur-btn p-2.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-xs font-medium text-center border-2 border-transparent text-[#dbdee1]">10 Minutos</button>
+          <button type="button" onclick="window.discordApp.selectTimeoutDuration(3600, this)" class="timeout-dur-btn p-2.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-xs font-medium text-center border-2 border-transparent text-[#dbdee1]">1 Hora</button>
+          <button type="button" onclick="window.discordApp.selectTimeoutDuration(86400, this)" class="timeout-dur-btn p-2.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-xs font-medium text-center border-2 border-transparent text-[#dbdee1]">1 Dia</button>
+          <button type="button" onclick="window.discordApp.selectTimeoutDuration(604800, this)" class="timeout-dur-btn p-2.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-xs font-medium text-center border-2 border-transparent text-[#dbdee1]">1 Semana</button>
+        </div>
+      </div>
+
+      <!-- Reason -->
+      <div>
+        <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1.5">MOTIVO</label>
+        <textarea id="timeoutModalReason" rows="2" placeholder="Ex: Spam ou comportamento desrespeitoso" class="w-full bg-[#1e1f22] text-white text-xs px-3 py-2 rounded-lg border border-[#3f4147] focus:outline-none focus:border-[#5865f2]"></textarea>
+      </div>
+
+      <div class="flex justify-end space-x-3 pt-2">
+        <button onclick="window.discordApp.closeTimeoutModal()" class="px-4 py-2 text-sm text-white hover:underline">Cancelar</button>
+        <button onclick="window.discordApp.confirmTimeout()" class="px-5 py-2 bg-[#f0b232] hover:bg-[#d99f2b] text-black font-bold text-sm rounded-lg transition shadow-lg">Colocar de Castigo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: KICK (EXPULSAR) -->
+  <!-- ========================================================= -->
+  <div id="kickModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4 bg-black/75">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-md rounded-xl shadow-2xl p-6 text-[#dbdee1] space-y-4">
+      <h3 id="kickModalTitle" class="text-xl font-bold text-white">Expulsar Membro</h3>
+      <p id="kickModalDesc" class="text-xs text-[#dbdee1] leading-relaxed">
+        Tem certeza de que deseja expulsar esse membro? Ele poderá retornar ao servidor caso possua um convite ativo.
+      </p>
+      <div>
+        <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1.5">MOTIVO DA EXPULSÃO</label>
+        <textarea id="kickModalReason" rows="2" placeholder="Opcional" class="w-full bg-[#1e1f22] text-white text-xs px-3 py-2 rounded-lg border border-[#3f4147] focus:outline-none focus:border-[#f23f43]"></textarea>
+      </div>
+      <div class="flex justify-end space-x-3 pt-2">
+        <button onclick="window.discordApp.closeKickModal()" class="px-4 py-2 text-sm text-white hover:underline">Cancelar</button>
+        <button onclick="window.discordApp.confirmKick()" class="px-5 py-2 bg-[#f23f43] hover:bg-[#da373c] text-white font-bold text-sm rounded-lg transition shadow-lg">Expulsar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: BAN (BANIR) -->
+  <!-- ========================================================= -->
+  <div id="banModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4 bg-black/75">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-md rounded-xl shadow-2xl p-6 text-[#dbdee1] space-y-4">
+      <h3 id="banModalTitle" class="text-xl font-bold text-white">Banir Membro do Servidor</h3>
+      <p id="banModalDesc" class="text-xs text-[#dbdee1] leading-relaxed">
+        Tem certeza de que deseja banir esse membro? Ele será desconectado e não poderá retornar ao servidor até que um moderador revogue o banimento.
+      </p>
+      <div>
+        <label class="block text-xs font-bold uppercase text-[#949ba4] mb-1.5">MOTIVO DO BANIMENTO</label>
+        <textarea id="banModalReason" rows="2" placeholder="Violação das regras da comunidade" class="w-full bg-[#1e1f22] text-white text-xs px-3 py-2 rounded-lg border border-[#3f4147] focus:outline-none focus:border-[#f23f43]"></textarea>
+      </div>
+      <div class="flex justify-end space-x-3 pt-2">
+        <button onclick="window.discordApp.closeBanModal()" class="px-4 py-2 text-sm text-white hover:underline">Cancelar</button>
+        <button onclick="window.discordApp.confirmBan()" class="px-5 py-2 bg-[#f23f43] hover:bg-[#da373c] text-white font-bold text-sm rounded-lg transition shadow-lg">Banir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: MEMBER PROFILE CARD & MODERATION -->
+  <!-- ========================================================= -->
+  <div id="memberProfileModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4 bg-black/70">
+    <div class="modal-content bg-[#232428] border border-[#1e1f22] w-96 rounded-2xl shadow-2xl overflow-hidden text-[#dbdee1]">
+      <div class="h-20 bg-[#5865f2] relative" id="profileModalBanner">
+        <button id="closeMemberProfileModal" class="absolute top-2 right-2 p-1 text-white/80 hover:text-white rounded-full bg-black/20">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="px-5 pb-5 relative">
+        <div class="relative -top-10 mb-[-28px]">
+          <div class="avatar-wrap w-20 h-20">
+            <div id="profileModalDecoration" class="avatar-decoration-overlay"></div>
+            <img id="profileModalAvatar" src="" class="w-20 h-20 rounded-full border-4 border-[#232428] object-cover" alt="Profile" />
+          </div>
+        </div>
+        <div>
+          <h3 id="profileModalName" class="text-lg font-bold text-white">Username</h3>
+          <span id="profileModalTag" class="text-xs text-[#949ba4]">#0000</span>
+        </div>
+
+        <!-- Timeout alert banner (shown if member is in timeout) -->
+        <div id="profileModalTimeoutAlert" class="hidden mt-3 p-2.5 rounded-lg bg-[#f0b232]/10 border border-[#f0b232]/30 text-xs text-[#f0b232] flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span>⏱️</span>
+            <div>
+              <div class="font-bold">De Castigo</div>
+              <div id="profileModalTimeoutRemaining" class="text-[11px] opacity-80">Restam 5 minutos</div>
+            </div>
+          </div>
+          <button id="btnRemoveTimeoutProfile" class="px-2 py-1 bg-[#f0b232] text-black font-bold text-[10px] rounded hover:bg-[#d99f2b] transition">
+            Remover
+          </button>
+        </div>
+
+        <div class="mt-3 pt-3 border-t border-[#35373c] space-y-2.5">
+          <div class="text-[11px] font-bold uppercase text-[#949ba4]">SOBRE MIM</div>
+          <div id="profileModalAbout" class="text-xs text-[#dbdee1]">Status info</div>
+          
+          <div class="text-[11px] font-bold uppercase text-[#949ba4] pt-1">DISTINTIVOS</div>
+          <div id="profileModalBadges" class="flex flex-wrap gap-1"></div>
+
+          <!-- CARGOS / ROLES SECTION -->
+          <div class="pt-2 border-t border-[#35373c]/50">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[11px] font-bold uppercase text-[#949ba4]">CARGOS</span>
+              <!-- Add role dropdown button -->
+              <div class="relative inline-block text-left" id="profileRoleDropdownWrapper">
+                <button id="btnProfileAddRole" class="text-[11px] text-[#5865f2] hover:underline font-semibold flex items-center space-x-0.5">
+                  <span>+ Cargo</span>
+                </button>
+                <div id="profileRoleMenu" class="hidden absolute right-0 bottom-6 w-48 bg-[#111214] border border-[#232428] rounded-lg shadow-xl p-1 z-50 text-xs">
+                  <!-- Populated dynamically with server roles -->
+                </div>
+              </div>
+            </div>
+            <div id="profileModalRoles" class="flex flex-wrap gap-1.5">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- MODERATION QUICK ACTIONS FOOTER -->
+          <div id="profileModalModActions" class="hidden pt-3 border-t border-[#35373c] grid grid-cols-3 gap-2">
+            <button id="btnProfileTimeout" class="p-2 bg-[#2b2d31] hover:bg-[#35373c] text-[#f0b232] rounded text-xs font-semibold flex items-center justify-center space-x-1 transition">
+              <span>⏱️</span> <span>Castigo</span>
+            </button>
+            <button id="btnProfileKick" class="p-2 bg-[#2b2d31] hover:bg-[#35373c] text-[#f23f43] rounded text-xs font-semibold flex items-center justify-center space-x-1 transition">
+              <span>👢</span> <span>Expulsar</span>
+            </button>
+            <button id="btnProfileBan" class="p-2 bg-[#f23f43] hover:bg-[#da373c] text-white rounded text-xs font-semibold flex items-center justify-center space-x-1 transition">
+              <span>🔨</span> <span>Banir</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: INVITE FRIENDS TO SERVER -->
+  <!-- ========================================================= -->
+  <div id="inviteFriendsModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4 bg-black/75">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-md rounded-xl shadow-2xl p-6 text-[#dbdee1] space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 id="inviteModalTitle" class="text-lg font-bold text-white">Convidar amigos para o servidor</h3>
+          <p id="inviteModalSubtitle" class="text-xs text-[#949ba4] mt-0.5">Envie um convite direto com notificação em tempo real</p>
+        </div>
+        <button onclick="window.discordApp.closeInviteFriendsModal()" class="text-[#949ba4] hover:text-white p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Search Friend -->
+      <div class="relative">
+        <input type="text" id="inputSearchInviteFriend" oninput="window.discordApp.filterInviteFriends(this.value)" placeholder="Buscar amigos ou usuários cadastrados..." class="w-full bg-[#1e1f22] text-xs text-white rounded-lg px-3 py-2 pr-8 focus:outline-none border border-[#3f4147]" />
+        <svg class="w-4 h-4 text-[#949ba4] absolute right-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      </div>
+
+      <!-- Friends List with Invite buttons -->
+      <div id="inviteFriendsListContainer" class="max-h-60 overflow-y-auto space-y-2 py-1 pr-1">
+        <!-- Populated dynamically -->
+      </div>
+
+      <!-- Invite Link section -->
+      <div class="pt-3 border-t border-[#35373c]/50">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-[#949ba4] mb-1.5">OU ENVIE UM LINK DE CONVITE</label>
+        <div class="flex items-center space-x-2 bg-[#1e1f22] p-1.5 rounded-lg border border-[#3f4147]">
+          <input type="text" id="serverInviteLinkInput" readonly value="https://discord.gg/clone-preview" class="bg-transparent flex-1 text-xs text-white px-2 focus:outline-none font-mono" />
+          <button onclick="window.discordApp.copyInviteLink()" id="btnCopyInviteLink" class="px-3 py-1 bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold rounded transition">
+            Copiar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: WEBRTC PERMISSION / SECURE CONTEXT GUIDE -->
+  <!-- ========================================================= -->
+  <div id="webrtcPermissionModal" class="hidden fixed inset-0 z-50 modal-overlay items-center justify-center p-4 bg-black/80">
+    <div class="modal-content bg-[#313338] border border-[#232428] w-full max-w-lg rounded-xl shadow-2xl p-6 text-[#dbdee1] space-y-4">
+      <div class="flex items-center justify-between border-b border-[#232428] pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-2xl">🔒</span>
+          <div>
+            <h3 class="text-base font-bold text-white">Transmissão de Tela Bloqueada pelo Navegador</h3>
+            <p class="text-xs text-[#949ba4]">O Chrome/Edge exige conexão segura para Go Live e Microfone</p>
+          </div>
+        </div>
+        <button onclick="document.getElementById('webrtcPermissionModal').classList.add('hidden'); document.getElementById('webrtcPermissionModal').classList.remove('flex');" class="text-[#949ba4] hover:text-white p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-[#dbdee1] leading-relaxed">
+        <p>Por segurança, navegadores modernos (Chrome, Edge, Brave) bloqueiam a captura de tela quando acessada por um endereço IP via HTTP (<code class="bg-[#1e1f22] px-1.5 py-0.5 rounded text-[#f23f43]">http://26.134.212.76:3000</code>).</p>
+        
+        <div class="bg-[#1e1f22] p-3.5 rounded-lg border border-[#3f4147] space-y-2">
+          <div class="font-bold text-white text-xs flex items-center space-x-1.5">
+            <span>⚡</span>
+            <span>Como liberar a transmissão em 30 segundos no Chrome/Edge:</span>
+          </div>
+          <ol class="list-decimal list-inside space-y-1.5 text-[#b5bac1]">
+            <li>Abra uma nova aba e acesse: <br/><strong class="text-[#00a8fc] font-mono select-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</strong> (ou <strong class="text-[#00a8fc] font-mono">edge://flags</strong>)</li>
+            <li>No campo de texto que aparecer, cole o endereço: <br/><strong class="text-[#23a55a] font-mono select-all">http://26.134.212.76:3000</strong></li>
+            <li>Altere a opção de <strong>Disabled</strong> para <strong class="text-[#23a55a]">Enabled</strong>.</li>
+            <li>Clique no botão azul <strong>Relaunch (Reiniciar)</strong> no canto inferior.</li>
+          </ol>
+        </div>
+
+        <div class="p-2.5 rounded bg-[#5865f2]/10 border border-[#5865f2]/30 text-[#dbdee1]">
+          💡 <strong>No Render.com (Produção):</strong> Quando o projeto for publicado no Render com HTTPS, essa configuração não será necessária! Funcionará direto para qualquer pessoa.
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button onclick="document.getElementById('webrtcPermissionModal').classList.add('hidden'); document.getElementById('webrtcPermissionModal').classList.remove('flex');" class="px-4 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-bold text-xs rounded-lg transition shadow">
+          Entendi, vou configurar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- FLOATING USER VOICE VOLUME CONTROL MENU -->
+  <!-- ========================================================= -->
+  <div id="userVoiceVolumeMenu" class="hidden fixed z-[9999] bg-[#111214] border border-[#232428] rounded-xl shadow-2xl p-4 w-64 text-[#dbdee1] select-none">
+    <div class="flex items-center space-x-3 mb-3 pb-3 border-b border-[#232428]">
+      <img id="userVolumeAvatar" src="" class="w-10 h-10 rounded-full object-cover flex-shrink-0" alt="" />
+      <div class="min-w-0 flex-1">
+        <div id="userVolumeName" class="text-sm font-bold text-white truncate">Usuário</div>
+        <div class="text-[11px] text-[#949ba4]">Controle de Voz</div>
+      </div>
+    </div>
+    <div class="space-y-2.5">
+      <div class="flex items-center justify-between text-xs font-bold text-[#b5bac1] uppercase tracking-wider">
+        <span>Volume de Usuário</span>
+        <span id="userVolumePercentLabel" class="text-[#5865f2] font-mono font-bold">75%</span>
+      </div>
+      <input id="userVolumeSlider" type="range" min="0" max="100" value="75" class="w-full h-1.5 bg-[#4e5058] rounded-lg appearance-none cursor-pointer accent-[#5865f2]" />
+      <div class="flex justify-between text-[10px] text-[#949ba4] px-0.5 font-mono">
+        <span>0%</span>
+        <span>50%</span>
+        <span>100%</span>
+      </div>
+      <div class="pt-2 border-t border-[#232428] flex items-center justify-between">
+        <span class="text-xs text-[#b5bac1]">Silenciar para mim</span>
+        <button id="btnMuteTargetUser" class="px-2.5 py-1 text-xs rounded bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] transition">Silenciar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPTS -->
+  <!-- Firebase SDK v10 Compat CDN -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/store.js"></script>
   <script src="js/stream.js"></script>
