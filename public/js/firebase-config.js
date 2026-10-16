@@ -64,14 +64,25 @@ class FirebaseService {
           this.db = firebase.firestore();
           this.isConfigured = true;
 
-          // Carrega todos os usuários do banco em background
+          // Carrega todos os usuários e servidores do banco em background
           this.fetchAllDatabaseUsers();
+          this.fetchAllServers();
 
           // Listen to auth changes
-          this.auth.onAuthStateChanged(user => {
+          this.auth.onAuthStateChanged(async (user) => {
             this.currentUser = user;
             if (user) {
+              try {
+                const userDoc = await this.db.collection('users').doc(user.uid).get();
+                if (userDoc.exists) {
+                  const profile = userDoc.data();
+                  window.discordStore.user = profile;
+                  window.discordStore.save('discord_user', profile);
+                }
+              } catch (e) {}
+
               this.attachFirestoreListeners(user);
+              await this.fetchAllServers();
             }
             window.dispatchEvent(new CustomEvent('discord_firebase_auth_state', { detail: { user } }));
           });
@@ -216,6 +227,28 @@ class FirebaseService {
           isInitialSnapshot = false;
         });
     } catch (e) {}
+
+    // 5. Escuta em tempo real os servidores salvos no Firestore
+    try {
+      this.db.collection('servers').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+          const srv = { id: change.doc.id, ...change.doc.data() };
+          if (change.type === 'added' || change.type === 'modified') {
+            if (window.discordStore && window.discordStore.upsertServerFromCloud) {
+              window.discordStore.upsertServerFromCloud(srv);
+            }
+          } else if (change.type === 'removed') {
+            if (window.discordStore && window.discordStore.removeServerFromCloud) {
+              window.discordStore.removeServerFromCloud(change.doc.id);
+            }
+          }
+        });
+      }, err => {
+        console.warn('Erro ao escutar servidores em tempo real:', err);
+      });
+    } catch (e) {
+      console.warn('Erro ao registrar listener de servidores:', e);
+    }
   }
 
   // =========================================================
@@ -668,6 +701,96 @@ class FirebaseService {
 
     window.dispatchEvent(new CustomEvent('discord_message_received', { detail: { channelId: dmId, message } }));
     return message;
+  }
+
+  // =========================================================
+  // SERVERS (CLOUD FIRESTORE PERSISTENCE & REALTIME SYNC)
+  // =========================================================
+
+  async saveServer(server) {
+    if (!server || !server.id) return false;
+    if (this.isConfigured && this.db) {
+      try {
+        const payload = JSON.parse(JSON.stringify(server));
+        payload.memberIds = (server.members || []).map(m => m.id);
+        payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+        await this.db.collection('servers').doc(server.id).set(payload, { merge: true });
+        console.log(`☁️ Servidor "${server.name}" (${server.id}) salvo no Firestore com sucesso!`);
+        return true;
+      } catch (e) {
+        console.warn('Erro ao salvar servidor no Firestore:', e);
+      }
+    }
+    return false;
+  }
+
+  async deleteServer(serverId) {
+    if (!serverId) return false;
+    if (this.isConfigured && this.db) {
+      try {
+        await this.db.collection('servers').doc(serverId).delete();
+        console.log(`☁️ Servidor ${serverId} excluído do Firestore!`);
+        return true;
+      } catch (e) {
+        console.warn('Erro ao excluir servidor do Firestore:', e);
+      }
+    }
+    return false;
+  }
+
+  async fetchAllServers() {
+    if (this.isConfigured && this.db) {
+      try {
+        const snapshot = await this.db.collection('servers').get();
+        snapshot.forEach(doc => {
+          const srv = { id: doc.id, ...doc.data() };
+          if (window.discordStore && window.discordStore.upsertServerFromCloud) {
+            window.discordStore.upsertServerFromCloud(srv);
+          }
+        });
+        if (window.discordStore && window.discordStore.syncLocalServersToCloud) {
+          window.discordStore.syncLocalServersToCloud();
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar servidores do Firestore:', e);
+      }
+    }
+  }
+
+  // =========================================================
+  // CHANNEL MESSAGES IN CLOUD FIRESTORE
+  // =========================================================
+
+  async sendChannelMessage(serverId, channelId, message) {
+    if (!channelId || !message) return;
+    if (this.isConfigured && this.db) {
+      try {
+        await this.db.collection('channel_messages').doc(channelId).collection('messages').doc(message.id).set({
+          ...message,
+          serverId: serverId,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (e) {
+        console.warn('Erro ao salvar mensagem do canal no Firestore:', e);
+      }
+    }
+  }
+
+  async fetchChannelMessages(channelId) {
+    if (!channelId) return [];
+    if (this.isConfigured && this.db) {
+      try {
+        const snapshot = await this.db.collection('channel_messages').doc(channelId).collection('messages').get();
+        const msgs = [];
+        snapshot.forEach(doc => {
+          msgs.push({ id: doc.id, ...doc.data() });
+        });
+        return msgs;
+      } catch (e) {
+        console.warn('Erro ao carregar mensagens do canal do Firestore:', e);
+      }
+    }
+    return [];
   }
 }
 

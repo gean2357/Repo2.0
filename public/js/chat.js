@@ -4,6 +4,7 @@ class DiscordChatManager {
     this.initElements();
     this.setupListeners();
     this.curAttachment = null;
+    this.cloudLoadedChannels = new Set();
     this.startTimeoutMonitor();
   }
 
@@ -353,6 +354,11 @@ class DiscordChatManager {
       return;
     }
 
+    if (!this.cloudLoadedChannels.has(channel.id)) {
+      this.cloudLoadedChannels.add(channel.id);
+      this.loadCloudMessages(channel.id);
+    }
+
     const messages = window.discordStore.getChannelMessages(channel.id);
 
     // Channel Header Banner
@@ -466,6 +472,36 @@ class DiscordChatManager {
     out = out.replace(/@([a-zA-Z0-9_\-]+)/g, '<span class="mention">@$1</span>');
 
     return out;
+  }
+
+  async loadCloudMessages(channelId) {
+    if (!channelId || channelId.startsWith('dm-') || channelId === 'amigos') return;
+    if (window.firebaseService && window.firebaseService.isConfigured) {
+      try {
+        const cloudMsgs = await window.firebaseService.fetchChannelMessages(channelId);
+        if (Array.isArray(cloudMsgs) && cloudMsgs.length > 0) {
+          if (!window.discordStore.messages[channelId]) {
+            window.discordStore.messages[channelId] = [];
+          }
+          let hasNew = false;
+          cloudMsgs.forEach(cm => {
+            if (!window.discordStore.messages[channelId].some(m => m.id === cm.id)) {
+              window.discordStore.messages[channelId].push(cm);
+              hasNew = true;
+            }
+          });
+          if (hasNew) {
+            window.discordStore.save('discord_messages', window.discordStore.messages);
+            const currentChan = window.discordStore.getCurrentChannel();
+            if (currentChan && currentChan.id === channelId) {
+              this.renderMessages();
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar mensagens do canal do Firestore:', e);
+      }
+    }
   }
 }
 

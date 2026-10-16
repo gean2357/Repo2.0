@@ -361,6 +361,71 @@ class DiscordStore {
 
     // Real-time synchronization
     this.initSync();
+
+    // Listen to Firebase auth changes to sync servers
+    window.addEventListener('discord_firebase_auth_state', () => {
+      this.syncLocalServersToCloud();
+      if (window.discordApp) {
+        window.discordApp.renderServers();
+        window.discordApp.renderChannels();
+      }
+    });
+  }
+
+  upsertServerFromCloud(cloudServer) {
+    if (!cloudServer || !cloudServer.id) return;
+
+    const srvData = JSON.parse(JSON.stringify(cloudServer));
+    delete srvData.updatedAt;
+
+    const idx = this.servers.findIndex(s => s.id === srvData.id);
+    if (idx >= 0) {
+      this.servers[idx] = Object.assign({}, this.servers[idx], srvData);
+    } else {
+      this.servers.push(srvData);
+    }
+
+    this.normalizeServers();
+    this.save('discord_servers', this.servers);
+
+    if (window.discordApp) {
+      window.discordApp.renderServers();
+      window.discordApp.renderChannels();
+      window.discordApp.renderMembers();
+    }
+    window.dispatchEvent(new CustomEvent('discord_servers_updated', { detail: srvData }));
+  }
+
+  removeServerFromCloud(serverId) {
+    this.servers = this.servers.filter(s => s.id !== serverId);
+    this.save('discord_servers', this.servers);
+    if (this.currentServerId === serverId) {
+      this.currentServerId = 'home';
+    }
+    if (window.discordApp) {
+      window.discordApp.renderServers();
+      window.discordApp.renderChannels();
+    }
+  }
+
+  syncLocalServersToCloud() {
+    if (!window.firebaseService || !window.firebaseService.isConfigured) return;
+    const myId = this.user ? this.user.id : null;
+    if (!myId) return;
+
+    this.servers.forEach(s => {
+      const isMyServer = s.ownerId === myId || (s.members && s.members.some(m => m.id === myId && (m.role === 'Dono' || m.role === 'Admin')));
+      if (isMyServer && !['server-1', 'server-2', 'server-3'].includes(s.id)) {
+        window.firebaseService.saveServer(s);
+      }
+    });
+  }
+
+  persistServer(server) {
+    this.save('discord_servers', this.servers);
+    if (window.firebaseService && window.firebaseService.isConfigured && server && server.id) {
+      window.firebaseService.saveServer(server);
+    }
   }
 
   getUserServers() {
@@ -388,12 +453,15 @@ class DiscordStore {
       }
 
       // Se for o dono do servidor criado
-      if (s.ownerId && s.ownerId === user.id) {
+      const isOwner = (s.ownerId && s.ownerId === user.id) ||
+                      (s.ownerUsername && user.username && s.ownerUsername.toLowerCase() === user.username.toLowerCase()) ||
+                      (s.members && s.members.some(m => (m.role === 'Dono') && ((m.id && m.id === user.id) || (m.username && user.username && m.username.toLowerCase() === user.username.toLowerCase()))));
+      if (isOwner) {
         return true;
       }
 
       // Se foi convidado e aceitou (está na lista de membros)
-      if (s.members && s.members.some(m => m.id === user.id || (m.username && user.username && m.username.toLowerCase() === user.username.toLowerCase()))) {
+      if (s.members && s.members.some(m => (m.id && m.id === user.id) || (m.username && user.username && m.username.toLowerCase() === user.username.toLowerCase()))) {
         return true;
       }
 
@@ -479,7 +547,15 @@ class DiscordStore {
     }
 
     this.save('discord_servers', this.servers);
+    this.persistServer(srv);
     this.removeServerInvite(inviteId);
+
+    // If invite came from Firestore, delete it so it won't trigger again
+    if (inv.firestoreDocId && window.firebaseService && window.firebaseService.db) {
+      try {
+        window.firebaseService.db.collection('server_invites').doc(inv.firestoreDocId).delete().catch(() => {});
+      } catch (e) {}
+    }
 
     // Notifica outros peers
     this.sendWs({
@@ -785,7 +861,7 @@ class DiscordStore {
         const srv = this.servers.find(s => s.id === data.serverId);
         if (srv) {
           srv.roles = data.roles;
-          this.save('discord_servers', this.servers);
+          this.persistServer(srv);
           window.dispatchEvent(new CustomEvent('discord_roles_updated', { detail: data }));
         }
         break;
@@ -795,7 +871,7 @@ class DiscordStore {
         if (srvM) {
           const mb = (srvM.members || []).find(m => m.id === data.memberId);
           if (mb) mb.roles = data.roles;
-          this.save('discord_servers', this.servers);
+          this.persistServer(srvM);
           window.dispatchEvent(new CustomEvent('discord_member_updated', { detail: data }));
         }
         break;
@@ -815,7 +891,7 @@ class DiscordStore {
             this.user.timeoutReason = data.reason;
             this.save('discord_user', this.user);
           }
-          this.save('discord_servers', this.servers);
+          this.persistServer(srvT);
           window.dispatchEvent(new CustomEvent('discord_member_timeout', { detail: data }));
         }
         break;
@@ -835,7 +911,7 @@ class DiscordStore {
             this.user.timeoutReason = null;
             this.save('discord_user', this.user);
           }
-          this.save('discord_servers', this.servers);
+          this.persistServer(srvTR);
           window.dispatchEvent(new CustomEvent('discord_member_timeout', { detail: data }));
         }
         break;
@@ -844,7 +920,7 @@ class DiscordStore {
         const srvK = this.servers.find(s => s.id === data.serverId);
         if (srvK) {
           srvK.members = (srvK.members || []).filter(m => m.id !== data.memberId);
-          this.save('discord_servers', this.servers);
+          this.persistServer(srvK);
           window.dispatchEvent(new CustomEvent('discord_member_kicked', { detail: data }));
         }
         break;
@@ -855,7 +931,7 @@ class DiscordStore {
           if (!srvB.bans) srvB.bans = [];
           if (data.banEntry) srvB.bans.push(data.banEntry);
           srvB.members = (srvB.members || []).filter(m => m.id !== data.memberId);
-          this.save('discord_servers', this.servers);
+          this.persistServer(srvB);
           window.dispatchEvent(new CustomEvent('discord_member_banned', { detail: data }));
         }
         break;
@@ -864,7 +940,7 @@ class DiscordStore {
         const srvU = this.servers.find(s => s.id === data.serverId);
         if (srvU && srvU.bans) {
           srvU.bans = srvU.bans.filter(b => b.userId !== data.userId);
-          this.save('discord_servers', this.servers);
+          this.persistServer(srvU);
           window.dispatchEvent(new CustomEvent('discord_member_unbanned', { detail: data }));
         }
         break;
@@ -925,7 +1001,7 @@ class DiscordStore {
                 role: 'Membro',
                 roles: ['role-everyone']
               });
-              this.save('discord_servers', this.servers);
+              this.persistServer(srvJoined);
               window.dispatchEvent(new CustomEvent('discord_member_joined', { detail: data }));
               if (window.discordApp) {
                 window.discordApp.renderMembers();
@@ -1128,6 +1204,11 @@ class DiscordStore {
       try {
         window.firebaseService.sendDirectMessage(channelId, content, attachment);
       } catch (e) {}
+    } else if (!isDm && window.firebaseService && window.firebaseService.isConfigured) {
+      try {
+        const srv = this.getCurrentServer();
+        window.firebaseService.sendChannelMessage(srv ? srv.id : 'server', channelId, newMsg);
+      } catch (e) {}
     }
 
     // Broadcast message to peers
@@ -1223,6 +1304,7 @@ class DiscordStore {
       unread: false,
       badge: 0,
       ownerId: this.user.id,
+      ownerUsername: this.user.username,
       roles: JSON.parse(JSON.stringify(DEFAULT_ROLES)),
       bans: [],
       categories: [
@@ -1257,7 +1339,7 @@ class DiscordStore {
     };
 
     this.servers.push(newServer);
-    this.save('discord_servers', this.servers);
+    this.persistServer(newServer);
 
     // Broadcast server creation so connected clients receive the server
     this.sendWs({
@@ -1284,7 +1366,7 @@ class DiscordStore {
     };
 
     category.channels.push(newChan);
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     return newChan;
   }
 
@@ -1415,7 +1497,7 @@ class DiscordStore {
     };
 
     server.roles.unshift(newRole);
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     this.sendWs({ type: 'server_roles_updated', serverId, roles: server.roles });
     window.dispatchEvent(new CustomEvent('discord_roles_updated', { detail: { serverId, roles: server.roles } }));
     return newRole;
@@ -1428,7 +1510,7 @@ class DiscordStore {
     if (!role) return false;
 
     Object.assign(role, updates);
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     this.sendWs({ type: 'server_roles_updated', serverId, roles: server.roles });
     window.dispatchEvent(new CustomEvent('discord_roles_updated', { detail: { serverId, roles: server.roles } }));
     return true;
@@ -1444,7 +1526,7 @@ class DiscordStore {
       if (m.roles) m.roles = m.roles.filter(id => id !== roleId);
     });
 
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     this.sendWs({ type: 'server_roles_updated', serverId, roles: server.roles });
     window.dispatchEvent(new CustomEvent('discord_roles_updated', { detail: { serverId, roles: server.roles } }));
     return true;
@@ -1472,7 +1554,7 @@ class DiscordStore {
       }
     }
 
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     this.sendWs({ type: 'member_roles_updated', serverId, memberId, roles: memberId === this.user.id ? this.user.roles : (server.members.find(m => m.id === memberId)?.roles || []) });
     window.dispatchEvent(new CustomEvent('discord_member_updated', { detail: { serverId, memberId } }));
     return true;
@@ -1499,7 +1581,7 @@ class DiscordStore {
       }
     }
 
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     this.sendWs({ type: 'member_roles_updated', serverId, memberId, roles: memberId === this.user.id ? this.user.roles : (server.members.find(m => m.id === memberId)?.roles || []) });
     window.dispatchEvent(new CustomEvent('discord_member_updated', { detail: { serverId, memberId } }));
     return true;
@@ -1528,7 +1610,7 @@ class DiscordStore {
       member.timeoutReason = reason;
     }
 
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     this.sendWs({ type: 'member_timeout', serverId, memberId, timeoutUntil, reason });
     window.dispatchEvent(new CustomEvent('discord_member_timeout', { detail: { serverId, memberId, timeoutUntil, reason } }));
     return true;
@@ -1557,7 +1639,7 @@ class DiscordStore {
       member.timeoutReason = null;
     }
 
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     this.sendWs({ type: 'member_timeout_removed', serverId, memberId });
     window.dispatchEvent(new CustomEvent('discord_member_timeout', { detail: { serverId, memberId, timeoutUntil: null } }));
     return true;
@@ -1568,7 +1650,7 @@ class DiscordStore {
     if (!server) return false;
 
     server.members = (server.members || []).filter(m => m.id !== memberId);
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
 
     this.sendWs({ type: 'member_kicked', serverId, memberId, reason });
     window.dispatchEvent(new CustomEvent('discord_member_kicked', { detail: { serverId, memberId, reason } }));
@@ -1594,7 +1676,7 @@ class DiscordStore {
 
     server.bans.push(banEntry);
     server.members = (server.members || []).filter(m => m.id !== memberId);
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
 
     this.sendWs({ type: 'member_banned', serverId, memberId, banEntry });
     window.dispatchEvent(new CustomEvent('discord_member_banned', { detail: { serverId, memberId, banEntry } }));
@@ -1606,7 +1688,7 @@ class DiscordStore {
     if (!server || !server.bans) return false;
 
     server.bans = server.bans.filter(b => b.userId !== userId);
-    this.save('discord_servers', this.servers);
+    this.persistServer(server);
     this.sendWs({ type: 'member_unbanned', serverId, userId });
     window.dispatchEvent(new CustomEvent('discord_member_unbanned', { detail: { serverId, userId } }));
     return true;

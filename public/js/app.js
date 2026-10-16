@@ -1041,7 +1041,7 @@ class DiscordApp {
     if (newName) server.name = newName;
     server.iconImg = newIcon;
 
-    window.discordStore.save('discord_servers', window.discordStore.servers);
+    window.discordStore.persistServer(server);
     window.discordStore.sendWs({
       type: 'server_updated',
       server: server
@@ -1068,8 +1068,15 @@ class DiscordApp {
 
     window.discordStore.servers = window.discordStore.servers.filter(s => s.id !== server.id);
     window.discordStore.save('discord_servers', window.discordStore.servers);
+    if (window.firebaseService && window.firebaseService.isConfigured) {
+      window.firebaseService.deleteServer(server.id);
+    }
+    window.discordStore.sendWs({
+      type: 'server_deleted',
+      serverId: server.id
+    });
     this.closeServerSettings();
-    this.switchServer(window.discordStore.servers[0].id);
+    this.switchServer(window.discordStore.servers[0]?.id || 'home');
   }
 
   // --- TAB: ROLES ---
