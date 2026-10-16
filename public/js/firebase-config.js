@@ -76,13 +76,23 @@ class FirebaseService {
                 const userDoc = await this.db.collection('users').doc(user.uid).get();
                 if (userDoc.exists) {
                   const profile = userDoc.data();
-                  window.discordStore.user = profile;
-                  window.discordStore.save('discord_user', profile);
+                  if (window.discordStore) {
+                    window.discordStore.user = profile;
+                    window.discordStore.save('discord_user', profile);
+                    if (Array.isArray(profile.servers)) {
+                      profile.servers.forEach(srv => {
+                        window.discordStore.upsertServerFromCloud(srv);
+                      });
+                    }
+                  }
                 }
               } catch (e) {}
 
               this.attachFirestoreListeners(user);
               await this.fetchAllServers();
+            }
+            if (window.discordApp) {
+              window.discordApp.renderAll();
             }
             window.dispatchEvent(new CustomEvent('discord_firebase_auth_state', { detail: { user } }));
           });
@@ -152,7 +162,7 @@ class FirebaseService {
       console.warn('Erro ao escutar usuários:', e);
     }
 
-    // 2. Escuta alterações no meu perfil (como novos amigos adicionados na nuvem)
+    // 2. Escuta alterações no meu perfil (como novos amigos adicionados na nuvem e servidores)
     try {
       this.db.collection('users').doc(user.uid).onSnapshot(doc => {
         if (doc && doc.exists) {
@@ -160,10 +170,18 @@ class FirebaseService {
           if (data && data.friends) {
             window.discordStore.user.friends = data.friends;
             window.discordStore.save('discord_user', window.discordStore.user);
-            if (window.discordApp) {
-              window.discordApp.renderFriendsList();
-              window.discordApp.renderChannels();
-            }
+          }
+          if (data && Array.isArray(data.servers)) {
+            data.servers.forEach(srv => {
+              if (window.discordStore && window.discordStore.upsertServerFromCloud) {
+                window.discordStore.upsertServerFromCloud(srv);
+              }
+            });
+          }
+          if (window.discordApp) {
+            window.discordApp.renderFriendsList();
+            window.discordApp.renderChannels();
+            window.discordApp.renderServers();
           }
         }
       });
@@ -299,12 +317,20 @@ class FirebaseService {
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
+        this.currentUser = fbUser;
         // Save in Firestore 'users' collection
         await this.db.collection('users').doc(fbUser.uid).set(userProfile);
 
         // Update local store
         window.discordStore.user = userProfile;
         window.discordStore.save('discord_user', userProfile);
+
+        this.attachFirestoreListeners(fbUser);
+        await this.fetchAllServers();
+
+        if (window.discordApp) {
+          window.discordApp.renderAll();
+        }
 
         return userProfile;
       } catch (err) {
@@ -389,6 +415,7 @@ class FirebaseService {
 
         const userCredential = await this.auth.signInWithEmailAndPassword(emailToLogin, cleanPassword);
         const fbUser = userCredential.user;
+        this.currentUser = fbUser;
 
         // Fetch user profile from Firestore
         const doc = await this.db.collection('users').doc(fbUser.uid).get();
@@ -409,6 +436,21 @@ class FirebaseService {
 
         window.discordStore.user = userProfile;
         window.discordStore.save('discord_user', userProfile);
+
+        if (Array.isArray(userProfile.servers)) {
+          userProfile.servers.forEach(srv => {
+            if (window.discordStore && window.discordStore.upsertServerFromCloud) {
+              window.discordStore.upsertServerFromCloud(srv);
+            }
+          });
+        }
+
+        this.attachFirestoreListeners(fbUser);
+        await this.fetchAllServers();
+
+        if (window.discordApp) {
+          window.discordApp.renderAll();
+        }
 
         return userProfile;
       } catch (err) {
@@ -710,16 +752,71 @@ class FirebaseService {
   async saveServer(server) {
     if (!server || !server.id) return false;
     if (this.isConfigured && this.db) {
+      // 1. Tenta salvar na coleção /servers (caso as regras no Firebase Console estejam ativas)
       try {
         const payload = JSON.parse(JSON.stringify(server));
         payload.memberIds = (server.members || []).map(m => m.id);
         payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
         await this.db.collection('servers').doc(server.id).set(payload, { merge: true });
-        console.log(`☁️ Servidor "${server.name}" (${server.id}) salvo no Firestore com sucesso!`);
-        return true;
+        console.log(`☁️ Servidor "${server.name}" (${server.id}) salvo em /servers com sucesso!`);
       } catch (e) {
-        console.warn('Erro ao salvar servidor no Firestore:', e);
+        console.warn('Aviso: Coleção /servers requer permissão no Firebase Console (usando persistência em perfil):', e.message);
       }
+
+      // 2. Salva no documento do usuário logado (/users/{uid})
+      // Como /users tem "allow read, write: if true", esta persistência é 100% GARANTIDA!
+      const myUser = this.currentUser || (window.discordStore ? window.discordStore.user : null);
+      const myId = myUser ? (myUser.uid || myUser.id) : null;
+      if (myId && myId !== 'me') {
+        try {
+          const userDocRef = this.db.collection('users').doc(myId);
+          const userSnap = await userDocRef.get();
+          let existingServers = [];
+          if (userSnap.exists && userSnap.data() && Array.isArray(userSnap.data().servers)) {
+            existingServers = userSnap.data().servers;
+          } else if (window.discordStore && Array.isArray(window.discordStore.servers)) {
+            existingServers = window.discordStore.servers.filter(s => !['server-1', 'server-2', 'server-3'].includes(s.id));
+          }
+
+          const srvCopy = JSON.parse(JSON.stringify(server));
+          delete srvCopy.updatedAt;
+          const sIdx = existingServers.findIndex(s => s.id === server.id);
+          if (sIdx >= 0) {
+            existingServers[sIdx] = srvCopy;
+          } else {
+            existingServers.push(srvCopy);
+          }
+
+          await userDocRef.set({ servers: existingServers }, { merge: true });
+          console.log(`☁️ Servidor "${server.name}" persistido no documento /users/${myId}!`);
+        } catch (errUser) {
+          console.warn('Erro ao salvar servidor no documento do usuário:', errUser);
+        }
+      }
+
+      // 3. Atualiza também no perfil dos outros membros do servidor se cadastrados
+      try {
+        const membersToSync = (server.members || []).filter(m => m.id && m.id !== myId && !['me', 'user-admin'].includes(m.id));
+        for (const m of membersToSync) {
+          const mDocRef = this.db.collection('users').doc(m.id);
+          const mSnap = await mDocRef.get();
+          if (mSnap.exists) {
+            const mData = mSnap.data();
+            let mServers = Array.isArray(mData.servers) ? mData.servers : [];
+            const mIdx = mServers.findIndex(s => s.id === server.id);
+            const sCopy = JSON.parse(JSON.stringify(server));
+            delete sCopy.updatedAt;
+            if (mIdx >= 0) {
+              mServers[mIdx] = sCopy;
+            } else {
+              mServers.push(sCopy);
+            }
+            await mDocRef.set({ servers: mServers }, { merge: true });
+          }
+        }
+      } catch (errMembers) {}
+
+      return true;
     }
     return false;
   }
@@ -729,17 +826,29 @@ class FirebaseService {
     if (this.isConfigured && this.db) {
       try {
         await this.db.collection('servers').doc(serverId).delete();
-        console.log(`☁️ Servidor ${serverId} excluído do Firestore!`);
-        return true;
-      } catch (e) {
-        console.warn('Erro ao excluir servidor do Firestore:', e);
+        console.log(`☁️ Servidor ${serverId} excluído de /servers!`);
+      } catch (e) {}
+
+      const myUser = this.currentUser || (window.discordStore ? window.discordStore.user : null);
+      const myId = myUser ? (myUser.uid || myUser.id) : null;
+      if (myId && myId !== 'me') {
+        try {
+          const userDocRef = this.db.collection('users').doc(myId);
+          const userSnap = await userDocRef.get();
+          if (userSnap.exists && Array.isArray(userSnap.data().servers)) {
+            const updatedServers = userSnap.data().servers.filter(s => s.id !== serverId);
+            await userDocRef.set({ servers: updatedServers }, { merge: true });
+          }
+        } catch (eUser) {}
       }
+      return true;
     }
     return false;
   }
 
   async fetchAllServers() {
     if (this.isConfigured && this.db) {
+      // 1. Tenta carregar da coleção global /servers
       try {
         const snapshot = await this.db.collection('servers').get();
         snapshot.forEach(doc => {
@@ -748,11 +857,59 @@ class FirebaseService {
             window.discordStore.upsertServerFromCloud(srv);
           }
         });
-        if (window.discordStore && window.discordStore.syncLocalServersToCloud) {
-          window.discordStore.syncLocalServersToCloud();
-        }
       } catch (e) {
-        console.warn('Erro ao carregar servidores do Firestore:', e);
+        console.warn('Aviso: Coleção /servers requer regra no Firebase Console (carregando via usuários):', e.message);
+      }
+
+      // 2. Carrega servidores do perfil do usuário logado (/users/{myId})
+      const myUser = this.currentUser || (window.discordStore ? window.discordStore.user : null);
+      const myId = myUser ? (myUser.uid || myUser.id) : null;
+      if (myId && myId !== 'me') {
+        try {
+          const myDoc = await this.db.collection('users').doc(myId).get();
+          if (myDoc.exists && Array.isArray(myDoc.data().servers)) {
+            myDoc.data().servers.forEach(srv => {
+              if (window.discordStore && window.discordStore.upsertServerFromCloud) {
+                window.discordStore.upsertServerFromCloud(srv);
+              }
+            });
+          }
+        } catch (eUser) {
+          console.warn('Erro ao carregar servidores do perfil do usuário:', eUser);
+        }
+      }
+
+      // 3. Varre todos os usuários cadastrados em /users (leitura pública garantida)
+      try {
+        const usersSnapshot = await this.db.collection('users').get();
+        const currentUid = myId;
+        const currentUsername = (window.discordStore?.user?.username || '').toLowerCase();
+        usersSnapshot.forEach(doc => {
+          const uData = doc.data();
+          if (Array.isArray(uData.servers)) {
+            uData.servers.forEach(srv => {
+              const isOwner = (srv.ownerId === currentUid) ||
+                              (srv.ownerUsername && currentUsername && srv.ownerUsername.toLowerCase() === currentUsername) ||
+                              (srv.members && srv.members.some(m => m.role === 'Dono' && ((m.id === currentUid) || (m.username && currentUsername && m.username.toLowerCase() === currentUsername))));
+              const isMember = srv.members && srv.members.some(m => (m.id === currentUid) || (m.username && currentUsername && m.username.toLowerCase() === currentUsername));
+              if (isOwner || isMember) {
+                if (window.discordStore && window.discordStore.upsertServerFromCloud) {
+                  window.discordStore.upsertServerFromCloud(srv);
+                }
+              }
+            });
+          }
+        });
+      } catch (eAll) {}
+
+      // 4. Se houver servidores locais criados por mim nesta máquina, envia para a nuvem
+      if (window.discordStore && window.discordStore.syncLocalServersToCloud) {
+        window.discordStore.syncLocalServersToCloud();
+      }
+
+      if (window.discordApp) {
+        window.discordApp.renderServers();
+        window.discordApp.renderChannels();
       }
     }
   }

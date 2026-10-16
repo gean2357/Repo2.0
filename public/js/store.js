@@ -453,15 +453,17 @@ class DiscordStore {
       }
 
       // Se for o dono do servidor criado
-      const isOwner = (s.ownerId && s.ownerId === user.id) ||
-                      (s.ownerUsername && user.username && s.ownerUsername.toLowerCase() === user.username.toLowerCase()) ||
-                      (s.members && s.members.some(m => (m.role === 'Dono') && ((m.id && m.id === user.id) || (m.username && user.username && m.username.toLowerCase() === user.username.toLowerCase()))));
+      const myUid = user.uid || user.id;
+      const myUsername = (user.username || '').toLowerCase();
+      const isOwner = (s.ownerId && (s.ownerId === user.id || s.ownerId === myUid)) ||
+                      (s.ownerUsername && myUsername && s.ownerUsername.toLowerCase() === myUsername) ||
+                      (s.members && s.members.some(m => (m.role === 'Dono') && ((m.id && (m.id === user.id || m.id === myUid)) || (m.username && myUsername && m.username.toLowerCase() === myUsername))));
       if (isOwner) {
         return true;
       }
 
       // Se foi convidado e aceitou (está na lista de membros)
-      if (s.members && s.members.some(m => (m.id && m.id === user.id) || (m.username && user.username && m.username.toLowerCase() === user.username.toLowerCase()))) {
+      if (s.members && s.members.some(m => (m.id && (m.id === user.id || m.id === myUid)) || (m.username && myUsername && m.username.toLowerCase() === myUsername))) {
         return true;
       }
 
